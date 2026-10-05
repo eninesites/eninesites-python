@@ -1,0 +1,209 @@
+# templates/classic/library-pyproject.toml — the library pyproject.
+#
+# Where to put this depends on the project shape (see racecar's
+# arch-python/PACKAGING.md, "Scope"):
+#
+#   shape src           -> copy to:  pyproject.toml  (repo root)
+#   shape src+server   -> copy to:  pyproject.toml  (repo root)
+#                          (companion: server/pyproject.toml from server-pyproject.toml)
+#   shape server         -> copy to:  pyproject.toml  (repo root, the deployable)
+#
+# Substitute placeholders enclosed in `<...>`:
+#   eninesites       e.g. "athena"
+#   0.1.0              e.g. "0.2.0" -- must match the VERSION file at repo root
+#   A racecar-conforming Python project.
+#   TODO          author name
+#   todo@example.com              author email
+#   eninesites               top-level Python package, e.g. "athena"
+#   <runtime dep>        each direct runtime import, e.g. "numpy>=2.0"
+#   <where>              setuptools package source path; see table below
+#   layered DAG rows     replace with the project's actual peers and leaves
+#
+# Lockfiles are optional and not part of canon (racecar PACKAGING, lockfiles): a committed
+# `requirements.txt` is validated-if-present but never required, and there is no
+# `make lock` target — projects that want one generate it with their own tool.
+#
+# Dev deps are declared in PEP 735 `[dependency-groups]`, not in
+# `[project.optional-dependencies]`. Requires pip >= 25.1 to install the
+# group: `pip install --group dev`.
+
+[project]
+name = "eninesites"
+version = "0.1.0"
+description = "A command-line tool for eninesites"
+requires-python = ">=3.12"
+authors = [{ name = "Enine", email = "hello@enine.com" }]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+dependencies = [
+    # direct runtime imports only. Pin major / minor as needed.
+]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+# Canonical dev tool set per racecar's arch-python/PACKAGING.md, the
+# "Dev tooling" rules (PEP 735 dependency group).
+# Identical across racecar projects; modifying this list is a standards-change
+# conversation, not a project-by-project decision.
+[dependency-groups]
+dev = [
+    "black",
+    "isort",
+    "pylint==4.0.9",
+    "pylint-pytest",
+    "mypy",
+    "pytest",
+    "pytest-cov",
+    "pip-audit",
+    "import-linter",
+    "pre-commit",
+    "validate-pyproject",
+    "pyyaml>=6.0",                 # frontmatter parser for check_brief.py (racecar-llm-summary briefs)
+    "types-PyYAML",                # mypy stubs for pyyaml: the delivered scripts import yaml
+    "pytest-xdist",                # parallel test workers; inert until PYTEST_ARGS enables `-n`
+]
+django = [
+    # Django-specific dev tools. Install with: make install-dev
+    "djhtml",                     # canonical Django/Jinja template-tag reindenter (racecar canon); idempotent, community OSS
+    "coverage>=7.4",              # Django test runner needs coverage directly (pytest-cov is pytest-only)
+    "django-extensions",         # generated settings load it under DEBUG (racecar-create-server)
+    "django-debug-toolbar>=4.0",
+    "drf-spectacular[sidecar]>=0.27",
+    "pylint-django>=2.5",
+    # REQUIRED, not optional: the server/ pyproject that racecar-create-server generates
+    # declares `plugins = ["mypy_django_plugin.main"]`, and mypy hard-errors with
+    # "Error constructing plugin instance" when the plugin is not installed. So a repo that
+    # takes the generated server must have this in the same group that installs the rest of
+    # its Django dev stack, or its typecheck does not run at all.
+    "django-stubs",
+]
+
+# Shape-specific. See racecar's arch-python/PACKAGING.md, "Scope":
+#   shape src           ->  where = ["src"]
+#   shape src+server   ->  where = ["src"]
+#   shape server         ->  where = ["server"]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# PEP 561: ship the py.typed marker in the wheel. Without it the library's own types are
+# present in the tree and absent everywhere it is INSTALLED -- most visibly to the generated
+# server, whose typecheck would report `import-untyped` for this repo's own code.
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
+
+[tool.black]
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+
+[tool.pylint."MESSAGES CONTROL"]
+# THE STOCK SCAFFOLD SUPPRESSES NOTHING. This list is empty on purpose, and racecar's
+# checker does not grade it — there is no required set and no forbidden set.
+#
+# Two reasons. The first is ownership: which warnings a repo suppresses is the owner's
+# judgement, and racecar advises rather than overrules (../../shared/OWNERSHIP.md). A
+# scaffolded default is a starting point you edit, so shipping one pre-loaded with
+# suppressions decides for you before you have seen a single finding.
+#
+# The second is that a suppression shipped as a default is never revisited. Every entry
+# racecar used to ship here failed on examination: eight were pylint informational codes
+# that pylint withholds by default (they changed no output in any repo that carried them),
+# two were the `use-implicit-booleaness` pair that asks for the more Pythonic `not x` over
+# `x == 0`, and `duplicate-code` was racecar's own delivery constraint promoted to a
+# universal rule — which for a canon aimed at AI-built software silenced the single most
+# valuable check against the characteristic failure of generated code.
+#
+# So: start with pylint's full voice. When a message is genuinely wrong for your repo,
+# add it below WITH the argument, in your own words. An entry you can defend is canon
+# enough; an entry you inherited is just noise you stopped hearing.
+disable = []
+
+[tool.pylint.BASIC]
+# Names exempt from the docstring requirement: private (_x), pytest functions
+# (test_*), and Test* classes. Everything else public requires a docstring.
+no-docstring-rgx = "^_|^test_|^Test"
+# Functions / classes with fewer lines than this are exempt (trivial one-liners).
+docstring-min-length = 6
+
+[tool.pylint.DESIGN]
+# Raised caps, not disables — keep the backstop, allow cohesive data/CLI builders.
+max-args = 6
+max-attributes = 10
+max-locals = 25
+max-branches = 17
+max-bool-expr = 8
+
+[tool.pylint.SIMILARITIES]
+# Default 4 flags idiomatic per-verb CLI scaffolding; 12 clears those.
+min-similarity-lines = 12
+ignore-docstrings = true
+
+[tool.pylint.MAIN]
+py-version = "3.12"
+# Library plugins only. pylint_django is NOT added here (it would load over the
+# library tree too); racecar.mk's `lint` target loads it on the server via
+# --load-plugins (racecar PACKAGING, pylint-django).
+# pylint_pytest teaches the linter pytest's fixture protocol, so a fixture argument is not
+# read as an unused/redefined name. It is NOT loaded here, because it cannot survive
+# `pylint -j`: FixtureChecker.open() saves the already-patched VariablesChecker.add_message
+# into _original_add_message and patches again, and parallel mode calls open() once per job
+# per worker with no matching close(). The chain reaches ~980 frames and every job dies with
+# RecursionError, which pylint reports as an astroid failure naming an innocent file. So the
+# plugin is passed on the one invocation that needs it -- the test-profile pylint run in
+# racecar.mk, which stays serial for exactly this reason. Measured on this repo: it suppresses
+# 9 messages under tests/ (8 redefined-outer-name, 1 unused-argument) and changes NOTHING
+# under src/ and scripts/, where dropping it takes that run from 10.0s to 4.3s at -j 0.
+load-plugins = []
+
+[tool.pylint.MASTER]
+# Repo-relative regexes to skip. The doc-coherence pre-pass (scripts/check_docs.py)
+# also reads this list: the check scripts vendored under scripts/ are copied
+# verbatim from racecar and carry §N citations to racecar's own canon, which do
+# not resolve in this repo. Excluding scripts/ keeps the pre-pass policing this
+# project's own docs and config, not vendored racecar internals.
+ignore-paths = ["^scripts/", ".*/migrations/.*"]  # vendored racecar scripts + auto-generated django migrations
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests", "."]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+# Scope is what the repo commits. gitignore is already the repo's own statement of what is NOT
+# its code, so it is the one exclusion list rather than a second one maintained by hand. This
+# is what lets TYPECHECK_PATHS in racecar.mk be DIRECTORIES: mypy walks them and skips .venv/,
+# build/, dist/ and any vendored tree without either config naming them.
+exclude_gitignore = true
+
+[tool.coverage.run]
+# Measure coverage of what src/ holds: the one library package, whatever its name.
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+# Skip uninteresting lines from the report.
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+]
+# Projects may add `fail_under = N` here to gate `make coverage` on a
+# minimum percentage; racecar does not impose a default threshold.
+
+[tool.importlinter]
+root_package = "eninesites"
+
+[[tool.importlinter.contracts]]
+name = "eninesites: layered DAG"
+type = "layers"
+layers = [
+    # Fill in the project's real peer/leaf arrangement as it grows;
+    # see racecar's arch-python/PACKAGING.md. One layer naming the root
+    # package is a valid starting contract.
+    "eninesites",
+]

@@ -1,0 +1,48 @@
+# templates/classic/gitignore — copy to project root as `.gitignore`
+# (named without leading dot here so it ships in this directory listing).
+#
+# Canonical .gitignore for racecar Python projects. Project-specific lines
+# (data directories, cached outputs, IDE files) go beneath the
+# `# project-specific` marker so the canon top is easy to diff.
+
+# virtualenv
+.venv/
+venv/
+.env
+
+# Python build / install artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.installed.cfg
+*.egg
+
+# racecar's per-machine state: `api fix` artifacts and the like quote this checkout's
+# paths, and never leave the machine
+.rclocal/
+
+# tool caches
+.pytest_cache/
+.mypy_cache/
+.import_linter_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# project-specific
+# (add data directories, cached outputs, secrets, etc. below)

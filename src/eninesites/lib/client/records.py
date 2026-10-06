@@ -134,7 +134,10 @@ def refuse_unsupported(verb: str, why: str, **given: Any) -> None:
 
 def not_over_rest(verb: str, where: str) -> ApiError:
     """The refusal for a verb the eninesites REST API has no endpoint for."""
-    return ApiError(f"`{verb}` is not available over the eninesites REST API: {where}")
+    return ApiError(
+        f"`{verb}` is not available over the eninesites REST API: {where}",
+        code="not_available",
+    )
 
 
 def required(value: str | int | None, flag: str, what: str = "") -> str:

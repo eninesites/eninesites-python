@@ -22,6 +22,7 @@ from eninesites.errors import ApiError
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
 from eninesites.lib.client.records import project, request_body, required, rows
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import (
     DeleteMedia,
@@ -48,6 +49,7 @@ def list_media(
     return {"count": len(found), "results": found}
 
 
+@writes
 def upload_media(
     *,
     files: str | None = None,
@@ -55,7 +57,8 @@ def upload_media(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> UploadMedia:
+    dry_run: bool = False,
+) -> UploadMedia | PlannedRequest:
     """Upload files (``--files a.png,b.jpg``): ``POST .../media/`` multipart."""
     paths = [
         Path(p.strip()).expanduser() for p in (files or "").split(",") if p.strip()
@@ -65,7 +68,7 @@ def upload_media(
     missing = [str(p) for p in paths if not p.is_file()]
     if missing:
         raise ApiError(f"media upload: not a file: {', '.join(missing)}")
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     found = rows(client.json("POST", client.site_path("media"), files=paths), MediaRow)
     return {"count": len(found), "results": found}
 
@@ -85,6 +88,7 @@ def get_media(
     return result
 
 
+@writes
 def update_media(
     *,
     slug: str | None = None,
@@ -93,19 +97,21 @@ def update_media(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> UpdateMedia:
+    dry_run: bool = False,
+) -> UpdateMedia | PlannedRequest:
     """Change metadata from ``--data`` (e.g. ``filename``): ``POST .../media/<slug>/``."""
     body = request_body(data)
     if not body:
         raise ApiError(
             'media update: --data is required: a JSON file such as {"filename": "hero"}'
         )
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     path = client.site_path("media", required(slug, "--slug", SLUG))
     result: UpdateMedia = project(client.json("POST", path, body=body), UpdateMedia)
     return result
 
 
+@writes
 def delete_media(
     *,
     slug: str | None = None,
@@ -113,9 +119,10 @@ def delete_media(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> DeleteMedia:
+    dry_run: bool = False,
+) -> DeleteMedia | PlannedRequest:
     """Delete a media item: ``DELETE .../media/<slug>/`` (204)."""
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     target = required(slug, "--slug", SLUG)
     client.request("DELETE", client.site_path("media", target))
     return {

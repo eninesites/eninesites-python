@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 
 from eninesites.errors import ApiError
+from eninesites.lib import dryrun
 from eninesites.lib.cli import NounParser, print_commands, run
 from eninesites.lib.renderer import json as json_renderer
 from eninesites.schema import returns
@@ -55,6 +56,7 @@ def _cmd_add(args: argparse.Namespace) -> int:
         base_url=args.base_url,
         project_name=args.project_name,
         role=args.role,
+        dry_run=args.dry_run,
     )
     return json_renderer.show(args, result, plaintext.print_add)
 
@@ -78,6 +80,7 @@ def _cmd_update(args: argparse.Namespace) -> int:
         base_url=args.base_url,
         project_name=args.project_name,
         role=args.role,
+        dry_run=args.dry_run,
     )
     return json_renderer.show(args, result, plaintext.print_update)
 
@@ -146,13 +149,23 @@ def parser() -> argparse.ArgumentParser:
 
     for verb_parser in sub.choices.values():
         json_renderer.add_flag(verb_parser)
+    for name, verb_parser in sub.choices.items():
+        if dryrun.is_write(api.VERBS[name]):
+            dryrun.add_flag(verb_parser)
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     """Run one verb; with none, list the sub-nouns, or print the help when there are none."""
     listing = _print_commands if commands() else None
-    return run(parser(), argv, refusal=ApiError, error=plaintext.error, listing=listing)
+    return run(
+        parser(),
+        argv,
+        refusal=ApiError,
+        error=plaintext.error,
+        listing=listing,
+        json_error=json_renderer.error,
+    )
 
 
 def output() -> list[tuple[dict[str, object], dict[str, object]]]:

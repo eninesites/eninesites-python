@@ -20,6 +20,7 @@ from collections.abc import Callable
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
 from eninesites.lib.client.records import required, rows
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import AttachTag, DetachTag, ListTag, TagRow
 
@@ -46,6 +47,7 @@ def list_tag(
     }
 
 
+@writes
 def attach_tag(
     *,
     slug: str | None = None,
@@ -54,10 +56,11 @@ def attach_tag(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> AttachTag:
+    dry_run: bool = False,
+) -> AttachTag | PlannedRequest:
     """Put a site tag on the artifact (idempotent): ``POST .../tags/``."""
     chosen = required(tag, "--tag", TAG)
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     target = required(slug, "--slug", SLUG)
     path = client.site_path("artifacts", target, "tags")
     tags = rows(client.json("POST", path, body={"tag": chosen}), TagRow)
@@ -68,6 +71,7 @@ def attach_tag(
     }
 
 
+@writes
 def detach_tag(
     *,
     slug: str | None = None,
@@ -76,10 +80,11 @@ def detach_tag(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> DetachTag:
+    dry_run: bool = False,
+) -> DetachTag | PlannedRequest:
     """Take a tag off the artifact: ``DELETE .../tags/<tag slug>/`` (204)."""
     chosen = required(tag, "--tag", TAG)
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     target = required(slug, "--slug", SLUG)
     client.request("DELETE", client.site_path("artifacts", target, "tags", chosen))
     return {

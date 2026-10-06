@@ -10,7 +10,20 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `--dry-run` on every write verb: the request the verb would send, returned as its result
+  and not sent.
+- `python -m eninesites describe`: every command, its flags and its output schema, as data.
+- Under `--json`, a refusal is one JSON document on stderr (`status`, `code`, `detail`,
+  `errors`, `method`, `path`), carrying the server's problem details instead of flattening
+  them into a sentence; a usage error is the same document with `code` `usage`.
+
 ### Changed
+
+- A write verb's api function returns `<Result> | PlannedRequest` and takes `dry_run`; a
+  Python caller indexes the result through `eninesites.lib.dryrun.done(result)`, which
+  returns `<Result>` and raises `TypeError` on a planned request.
 
 - racecar's delivered files synced to `4f4a72b6`. The package gains `lib/error/`, racecar's
   error packet schema and its types, which nothing uses yet. `lib/cli.py` is racecar's own

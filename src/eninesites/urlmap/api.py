@@ -23,6 +23,7 @@ from eninesites.errors import ApiError
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
 from eninesites.lib.client.records import project, request_body, required, rows
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import (
     CreateUrlmap,
@@ -49,6 +50,7 @@ def list_urlmap(
     return {"count": len(found), "results": found}
 
 
+@writes
 def create_urlmap(
     *,
     domain: str | None = None,
@@ -56,7 +58,8 @@ def create_urlmap(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> CreateUrlmap:
+    dry_run: bool = False,
+) -> CreateUrlmap | PlannedRequest:
     """Map a path: ``POST .../urlmaps/``.
 
     The ``--data`` file holds ``path``, ``projection`` and ``artifact``.
@@ -68,7 +71,7 @@ def create_urlmap(
             f"urlmap create: the --data file lacks {', '.join(missing)}; it holds e.g. "
             '{"path": "legal/terms", "projection": "detail", "artifact": "terms"}'
         )
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     payload = client.json("POST", client.site_path("urlmaps"), body=body)
     result: CreateUrlmap = project(payload, CreateUrlmap)
     return result
@@ -91,6 +94,7 @@ def get_urlmap(
     return result
 
 
+@writes
 def update_urlmap(
     *,
     id_: str | None = None,
@@ -99,18 +103,20 @@ def update_urlmap(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> UpdateUrlmap:
+    dry_run: bool = False,
+) -> UpdateUrlmap | PlannedRequest:
     """Change the fields in ``--data``: ``PATCH .../urlmaps/<id>/``."""
     entry = required(id_, "--id", ID)
     body = request_body(data)
     if not body:
         raise ApiError("urlmap update: --data is required (the fields to change)")
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     payload = client.json("PATCH", client.site_path("urlmaps", entry), body=body)
     result: UpdateUrlmap = project(payload, UpdateUrlmap)
     return result
 
 
+@writes
 def delete_urlmap(
     *,
     id_: str | None = None,
@@ -118,10 +124,11 @@ def delete_urlmap(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> DeleteUrlmap:
+    dry_run: bool = False,
+) -> DeleteUrlmap | PlannedRequest:
     """Delete a mapping: ``DELETE .../urlmaps/<id>/`` (204)."""
     entry = required(id_, "--id", ID)
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     client.request("DELETE", client.site_path("urlmaps", entry))
     return {
         "domain": credentials.require_site(client.settings),

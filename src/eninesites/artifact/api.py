@@ -22,6 +22,7 @@ from eninesites.errors import ApiError
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
 from eninesites.lib.client.records import boolean, merged, project, required, rows
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import (
     ArtifactRow,
@@ -65,6 +66,7 @@ def get_artifact(
     return result
 
 
+@writes
 def create_artifact(
     *,
     name: str | None = None,
@@ -77,7 +79,8 @@ def create_artifact(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> CreateArtifact:
+    dry_run: bool = False,
+) -> CreateArtifact | PlannedRequest:
     """Create an artifact, under ``--pnode`` (a parent's name or slug) when given.
 
     ``POST .../artifacts/``. ``--data`` carries any other writable field (``display_name``,
@@ -93,13 +96,14 @@ def create_artifact(
     )
     if not body.get("name"):
         raise ApiError("artifact create: --name is required")
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     result: CreateArtifact = project(
         client.json("POST", client.site_path("artifacts"), body=body), CreateArtifact
     )
     return result
 
 
+@writes
 def update_artifact(
     *,
     slug: str | None = None,
@@ -111,7 +115,8 @@ def update_artifact(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> UpdateArtifact:
+    dry_run: bool = False,
+) -> UpdateArtifact | PlannedRequest:
     """Update the fields given, leaving the rest: ``POST .../artifacts/<slug>/`` (partial)."""
     body = merged(
         data,
@@ -123,7 +128,7 @@ def update_artifact(
         raise ApiError(
             "artifact update: nothing to update; pass a field flag or --data"
         )
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     path = client.site_path("artifacts", required(slug, "--slug", SLUG))
     result: UpdateArtifact = project(
         client.json("POST", path, body=body), UpdateArtifact
@@ -131,6 +136,7 @@ def update_artifact(
     return result
 
 
+@writes
 def delete_artifact(
     *,
     slug: str | None = None,
@@ -138,9 +144,10 @@ def delete_artifact(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> DeleteArtifact:
+    dry_run: bool = False,
+) -> DeleteArtifact | PlannedRequest:
     """Delete an artifact and its subtree: ``DELETE .../artifacts/<slug>/`` (204)."""
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     target = required(slug, "--slug", SLUG)
     client.request("DELETE", client.site_path("artifacts", target))
     return {

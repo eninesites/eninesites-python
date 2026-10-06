@@ -11,7 +11,7 @@ import sys
 
 from eninesites.lib.renderer import text
 
-from ..results import ConfigRoot, LoginRoot, LogoutRoot
+from ..results import ConfigRoot, DescribeRoot, LoginRoot, LogoutRoot
 
 
 def print_login(result: LoginRoot) -> None:
@@ -56,6 +56,17 @@ def print_config(result: ConfigRoot) -> None:
             "api key": shown(result["api_key"], result["api_key_source"]),
             "site": shown(result["site"], result["site_source"]),
         }
+    )
+
+
+def print_describe(result: DescribeRoot) -> None:
+    """``describe`` as text: one line per command; ``--json`` carries the flags and schemas."""
+    text.table(
+        [
+            {**c, "writes": "write" if c["writes"] else "read"}
+            for c in result["commands"]
+        ],
+        ["command", "writes", "description"],
     )
 
 

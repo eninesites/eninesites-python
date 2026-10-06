@@ -14,6 +14,7 @@ from conftest import FakeServer
 
 from eninesites.artifact.role import __main__ as cli
 from eninesites.artifact.role import api
+from eninesites.lib import dryrun
 
 # One real call per verb, for the test that checks each result against its type.
 SAMPLES: dict[str, dict[str, Any]] = {
@@ -61,7 +62,9 @@ def test_unassign_puts_back_the_other_roles(server: FakeServer) -> None:
     path = "/api/v1/site/example.com/artifacts/services/roles/"
     server.add("GET", path, {"roles": ["what", "who"]})
     server.add("PUT", path, {"roles": ["who"]})
-    assert api.unassign_role(slug="services", role="what")["roles"] == ["who"]
+    assert dryrun.done(api.unassign_role(slug="services", role="what"))["roles"] == [
+        "who"
+    ]
     assert [c.method for c in server.calls] == ["GET", "PUT"]
     assert server.last.json() == {"roles": ["who"]}
 
@@ -70,7 +73,9 @@ def test_unassigning_an_absent_role_writes_nothing(server: FakeServer) -> None:
     server.add(
         "GET", "/api/v1/site/example.com/artifacts/services/roles/", {"roles": ["who"]}
     )
-    assert api.unassign_role(slug="services", role="what")["roles"] == ["who"]
+    assert dryrun.done(api.unassign_role(slug="services", role="what"))["roles"] == [
+        "who"
+    ]
     assert [c.method for c in server.calls] == ["GET"]
 
 

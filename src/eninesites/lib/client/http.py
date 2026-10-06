@@ -8,7 +8,14 @@ list endpoints are paginated ``{count, next, previous, results}`` or, on several
 a bare array.
 
 Every failure becomes the package's one refusal, ``ApiError``, whose message names the HTTP
-status, the server's ``code`` and its ``detail``. The key never appears in a message.
+status, the server's ``code`` and its ``detail``, and which carries the same facts as fields
+(``status``, ``code``, ``detail``, ``errors``) for ``--json``. A failure with no server
+``code`` gets the client's own (``errors.CLIENT_CODES``). The key never appears in a message.
+
+In dry-run mode (``connect(..., dry_run=True)``) a GET is still sent, because a write often
+resolves something first, and the first other request is not sent: ``Client.request``
+raises ``dryrun.Planned`` carrying it, which the api function's ``dryrun.writes`` turns into
+its result.
 
 ``transport`` is the only function that touches the network; tests replace it.
 """
@@ -26,9 +33,10 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 from urllib import error, request
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit
 
 from eninesites.errors import ApiError
+from eninesites.lib import dryrun
 
 from . import credentials
 from .credentials import Settings
@@ -72,7 +80,11 @@ class _NoRedirect(request.HTTPRedirectHandler):
         raise ApiError(
             f"the server redirected {req.get_method()} {req.full_url} to {newurl} "
             f"({code}); not followed, so the API key is not sent there. If that is the "
-            "API's real address, pass it as --base-url."
+            "API's real address, pass it as --base-url.",
+            status=code,
+            code="redirect_refused",
+            method=req.get_method(),
+            path=urlsplit(req.full_url).path,
         )
 
 
@@ -94,9 +106,26 @@ def transport(req: request.Request, timeout: float) -> Reply:
         content_type = exc.headers.get_content_type() if exc.headers else ""
         return Reply(exc.code, content_type, body, {})
     except error.URLError as exc:
-        raise ApiError(f"cannot reach {req.full_url}: {exc.reason}") from exc
+        if isinstance(exc.reason, TimeoutError):
+            raise timed_out(req, timeout) from exc
+        raise ApiError(
+            f"cannot reach {req.full_url}: {exc.reason}",
+            code="unreachable",
+            method=req.get_method(),
+            path=urlsplit(req.full_url).path,
+        ) from exc
     except TimeoutError as exc:
-        raise ApiError(f"{req.full_url} did not answer within {timeout:.0f}s") from exc
+        raise timed_out(req, timeout) from exc
+
+
+def timed_out(req: request.Request, timeout: float) -> ApiError:
+    """The refusal for a server that did not answer within ``timeout`` seconds."""
+    return ApiError(
+        f"{req.full_url} did not answer within {timeout:.0f}s",
+        code="timeout",
+        method=req.get_method(),
+        path=urlsplit(req.full_url).path,
+    )
 
 
 def _version() -> str:
@@ -132,9 +161,10 @@ def segment(value: str | int) -> str:
 class Client:
     """An authenticated client bound to one base URL and one key."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, dry_run: bool = False) -> None:
         """Bind to resolved settings; refuses now when there is no key to send."""
         self.settings = settings
+        self.dry_run = dry_run
         self._key = credentials.require_key(settings)
 
     def site_path(self, *parts: str | int) -> str:
@@ -152,7 +182,19 @@ class Client:
         files: list[Path] | None = None,
         form: dict[str, str] | None = None,
     ) -> Reply:
-        """Send one request; return the reply when it succeeded, else raise ``ApiError``."""
+        """Send one request; return the reply when it succeeded, else raise ``ApiError``.
+
+        In dry-run mode anything but a GET is not sent: ``dryrun.Planned`` is raised instead.
+        """
+        if self.dry_run and method != "GET":
+            raise dryrun.Planned(
+                method,
+                path,
+                query=query,
+                body=body,
+                files=[str(f) for f in files] if files is not None else None,
+                form=form,
+            )
         url = self.settings.base_url + path
         if query:
             url += "?" + urlencode(query)
@@ -170,7 +212,7 @@ class Client:
         req = request.Request(url, data=data, headers=headers, method=method)
         reply = transport(req, TIMEOUT_SECONDS)
         if reply.status >= 400:
-            raise ApiError(describe_error(method, path, reply))
+            raise refusal(method, path, reply)
         return reply
 
     def json(self, method: str, path: str, **kwargs: Any) -> Any:
@@ -183,7 +225,11 @@ class Client:
         except (ValueError, UnicodeDecodeError) as exc:
             raise ApiError(
                 f"{method} {path}: the server answered {reply.status} with a body that is "
-                f"not JSON ({reply.content_type or 'no content type'})"
+                f"not JSON ({reply.content_type or 'no content type'})",
+                status=reply.status,
+                code="not_json",
+                method=method,
+                path=path,
             ) from exc
 
     def get(self, path: str, query: dict[str, str | int] | None = None) -> Any:
@@ -206,17 +252,49 @@ class Client:
             rows += payload.get("results") or []
             if not payload.get("next"):
                 return rows
-        raise ApiError(f"GET {path}: more than {MAX_PAGES} pages; refusing to continue")
+        raise ApiError(
+            f"GET {path}: more than {MAX_PAGES} pages; refusing to continue",
+            method="GET",
+            path=path,
+        )
 
 
-def describe_error(method: str, path: str, reply: Reply) -> str:
-    """One line naming what went wrong, from the problem details when the server sent them."""
-    head = f"{method} {path}: HTTP {reply.status}"
+def problem_of(reply: Reply) -> dict[str, Any] | None:
+    """The reply's problem details (or any JSON object it carries), else None."""
     try:
         payload = json.loads(reply.body) if reply.body.strip() else None
     except (ValueError, UnicodeDecodeError):
-        payload = None
-    if isinstance(payload, dict):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def refusal(method: str, path: str, reply: Reply) -> ApiError:
+    """An error reply as the one refusal: a line for a person, the fields for ``--json``."""
+    payload = problem_of(reply)
+    code = detail = None
+    errors = None
+    if payload is not None:
+        code = payload.get("code") or payload.get("error")
+        detail = payload.get("detail") or payload.get("message")
+        errors = payload.get("errors") or None
+    message = describe_error(method, path, reply, payload)
+    return ApiError(
+        message,
+        status=reply.status,
+        code=str(code) if code else "not_problem",
+        detail=str(detail) if detail else message,
+        errors=errors if isinstance(errors, (dict, list)) else None,
+        method=method,
+        path=path,
+    )
+
+
+def describe_error(
+    method: str, path: str, reply: Reply, payload: dict[str, Any] | None
+) -> str:
+    """One line naming what went wrong, from the problem details when the server sent them."""
+    head = f"{method} {path}: HTTP {reply.status}"
+    if payload is not None:
         code = payload.get("code") or payload.get("error")
         detail = payload.get("detail") or payload.get("message")
         if code and code != detail:
@@ -286,9 +364,14 @@ def connect(
     base_url: str | None = None,
     project_name: str | None = None,
     domain: str | None = None,
+    *,
+    dry_run: bool = False,
 ) -> Client:
-    """Resolve the settings for one command and return a client bound to them."""
-    return Client(credentials.resolve(api_key, base_url, project_name, domain))
+    """Resolve the settings for one command and return a client bound to them.
+
+    ``dry_run`` sends GETs only; see ``Client.request``.
+    """
+    return Client(credentials.resolve(api_key, base_url, project_name, domain), dry_run)
 
 
 def filename_from(reply: Reply) -> str | None:

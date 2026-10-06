@@ -3,7 +3,9 @@
 One renderer for every noun, because nothing about it is noun-specific. A result holds
 JSON types only, so rendering it is ``json.dumps`` and nothing else: no key is added,
 renamed or dropped, and the shape printed is the one ``output()`` publishes. Nothing else
-reaches stdout under ``--json``; a diagnostic or a refusal goes to stderr.
+reaches stdout under ``--json``; a diagnostic or a refusal goes to stderr, and a refusal goes
+there as one JSON document too (``error``), so an agent reads why a verb could not run as
+data rather than as a sentence.
 """
 
 from __future__ import annotations
@@ -13,6 +15,10 @@ import json
 import sys
 from collections.abc import Callable, Mapping
 from typing import Any, Protocol, TypeVar
+
+from eninesites.errors import ApiError
+from eninesites.lib import dryrun
+from eninesites.lib.renderer import text
 
 Result = TypeVar("Result", bound=Mapping[str, Any])
 
@@ -43,20 +49,29 @@ def print_json(result: Mapping[str, object]) -> None:
     sys.stdout.write(render(result))
 
 
+def error(exc: ApiError) -> None:
+    """A refusal on stderr as one JSON document (``errors.ErrorResult``); stdout stays empty."""
+    sys.stderr.write(render(exc.record()))
+
+
 def show(
     args: argparse.Namespace,
     result: Result,
-    print_text: Callable[[Result], None],
+    print_text: Callable[[Any], None],
     *,
     found: bool = False,
 ) -> int:
     """Print the result as JSON under ``--json``, else as the verb's text view.
 
+    A write verb's result under ``--dry-run`` is the request it would have sent
+    (``dryrun.PlannedRequest``), and its text view is shared rather than the verb's own.
     The exit code is 0, or 1 when ``found``: a verb that reports findings, such as a check,
     passes ``found`` from its result, and exits 1 when it ran and found something.
     """
     if args.json:
         print_json(result)
+    elif dryrun.is_planned(result):
+        text.planned(result)
     else:
         print_text(result)
     return 1 if found else 0

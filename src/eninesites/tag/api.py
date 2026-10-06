@@ -20,6 +20,7 @@ from collections.abc import Callable
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
 from eninesites.lib.client.records import project, required, rows
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import CreateTag, DeleteTag, GetTag, ListTag, TagRow, UpdateTag
 
@@ -39,6 +40,7 @@ def list_tag(
     return {"count": len(found), "results": found}
 
 
+@writes
 def create_tag(
     *,
     name: str | None = None,
@@ -46,10 +48,11 @@ def create_tag(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> CreateTag:
+    dry_run: bool = False,
+) -> CreateTag | PlannedRequest:
     """Create a tag: ``POST .../tags/`` with ``{"name": ...}``."""
     body = {"name": required(name, "--name", "the tag's name")}
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     result: CreateTag = project(
         client.json("POST", client.site_path("tags"), body=body), CreateTag
     )
@@ -72,6 +75,7 @@ def get_tag(
     return result
 
 
+@writes
 def update_tag(
     *,
     slug: str | None = None,
@@ -80,15 +84,17 @@ def update_tag(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> UpdateTag:
+    dry_run: bool = False,
+) -> UpdateTag | PlannedRequest:
     """Rename a tag: ``POST .../tags/<slug>/`` with ``{"name": ...}``."""
     body = {"name": required(name, "--name", "the tag's new name")}
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     path = client.site_path("tags", required(slug, "--slug", SLUG))
     result: UpdateTag = project(client.json("POST", path, body=body), UpdateTag)
     return result
 
 
+@writes
 def delete_tag(
     *,
     slug: str | None = None,
@@ -96,9 +102,10 @@ def delete_tag(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> DeleteTag:
+    dry_run: bool = False,
+) -> DeleteTag | PlannedRequest:
     """Delete a tag: ``DELETE .../tags/<slug>/`` (204)."""
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     target = required(slug, "--slug", SLUG)
     client.request("DELETE", client.site_path("tags", target))
     return {

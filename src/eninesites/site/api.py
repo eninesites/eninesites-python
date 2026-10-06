@@ -22,6 +22,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from eninesites.errors import ApiError
+from eninesites.lib import dryrun
 from eninesites.lib.client import config, credentials
 from eninesites.lib.client.http import connect, filename_from
 from eninesites.lib.client.records import (
@@ -31,6 +32,7 @@ from eninesites.lib.client.records import (
     refuse_unsupported,
     rows,
 )
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import (
     BuildSite,
@@ -63,6 +65,7 @@ LOAD_SUFFIXES = (".json", ".yml", ".yaml", ".csv")
 RESTORE_MODES = ("merge", "clobber", "replace")
 
 
+@writes
 def create_site(
     *,
     name: str | None = None,
@@ -77,7 +80,8 @@ def create_site(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> CreateSite:
+    dry_run: bool = False,
+) -> CreateSite | PlannedRequest:
     """Create a site owned by the caller: ``POST /api/v1/site/``.
 
     ``--domain`` is the NEW site's domain; without it a free plan is served on an allocated
@@ -103,7 +107,7 @@ def create_site(
         if not isinstance(site_config, dict):
             raise ApiError("--data: 'config' must be a JSON object")
         site_config["theme"] = {"name": theme, "path": f"{theme}/templates"}
-    client = connect(api_key, base_url, project_name)
+    client = connect(api_key, base_url, project_name, dry_run=dry_run)
     payload = client.json("POST", "/api/v1/site/", body=body)
     return {"domain": str((payload or {}).get("domain", ""))}
 
@@ -174,6 +178,7 @@ def _source(path: Path | None, verb: str, kinds: str) -> Path:
     return Path(path).expanduser()
 
 
+@writes
 def load_site(
     *,
     domain: str | None = None,
@@ -184,7 +189,8 @@ def load_site(
     base_url: str | None = None,
     project_name: str | None = None,
     path: Path | None = None,
-) -> LoadSite:
+    dry_run: bool = False,
+) -> LoadSite | PlannedRequest:
     """Upsert a .json/.yml/.yaml/.csv file into an existing site: ``POST /api/v1/site/<d>/``.
 
     An upsert, not a replace (``docs/API.md``, "Import is an upsert"). Creating a new site
@@ -203,12 +209,13 @@ def load_site(
     if suffix not in LOAD_SUFFIXES:
         hint = " (a .zip archive is `site restore`)" if suffix == ".zip" else ""
         raise ApiError(f"--path {source}: expected .json, .yml, .yaml or .csv{hint}")
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     payload = client.json("POST", client.site_path(), files=[source])
     site = (payload or {}).get("domain") or credentials.require_site(client.settings)
     return {"domain": str(site), "file": str(source)}
 
 
+@writes
 def restore_site(
     *,
     mode: str | None = None,
@@ -220,7 +227,8 @@ def restore_site(
     base_url: str | None = None,
     project_name: str | None = None,
     path: Path | None = None,
-) -> RestoreSite:
+    dry_run: bool = False,
+) -> RestoreSite | PlannedRequest:
     """Restore a portable .zip over an existing site: ``POST /api/v1/site/<d>/?mode=``.
 
     ``merge`` (default) keeps rows the archive does not mention, ``clobber`` overwrites rows
@@ -240,7 +248,7 @@ def restore_site(
     source = _source(path, "site restore", "a .zip from `site dump --format zip`")
     if source.suffix.lower() != ".zip":
         raise ApiError(f"--path {source}: expected a .zip archive")
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     payload = client.json(
         "POST", client.site_path(), query={"mode": chosen}, files=[source]
     )
@@ -248,6 +256,7 @@ def restore_site(
     return {"domain": str(site), "file": str(source), "mode": chosen}
 
 
+@writes
 def copy_site(
     *,
     domain: str | None = None,
@@ -258,12 +267,13 @@ def copy_site(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> CopySite:
+    dry_run: bool = False,
+) -> CopySite | PlannedRequest:
     """Copy a site losslessly into a new domain: ``POST /api/v1/site/<d>/copy/``."""
     refuse_unsupported("site copy", "the copy is owned by the caller", user=user)
     if not to:
         raise ApiError("site copy: --to <new-domain> is required")
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     body = merged(None, to=to, name=name, plan=str(plan) if plan else None)
     payload = client.json("POST", client.site_path("copy"), body=body)
     return {
@@ -272,6 +282,7 @@ def copy_site(
     }
 
 
+@writes
 def configure_site(
     *,
     domain: str | None = None,
@@ -287,7 +298,8 @@ def configure_site(
     base_url: str | None = None,
     project_name: str | None = None,
     path: Path | None = None,
-) -> ConfigureSite:
+    dry_run: bool = False,
+) -> ConfigureSite | PlannedRequest:
     """Update theme, config and colors: ``POST /api/v1/site/<d>/configure/``.
 
     ``--path`` is a JSON file holding an object in the endpoint's own shape (``theme``,
@@ -313,7 +325,7 @@ def configure_site(
     )
     if not body:
         raise ApiError("site configure: no configuration fields provided")
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     payload = client.json("POST", client.site_path("configure"), body=body)
     updated = (payload or {}).get("updated") or []
     return {
@@ -333,9 +345,12 @@ def _section(body: dict[str, object], key: str, **fields: str | None) -> None:
     section.update(given)
 
 
-def delete_site(*, domain: str | None = None) -> DeleteSite:
+@writes
+def delete_site(
+    *, domain: str | None = None, dry_run: bool = False
+) -> DeleteSite | PlannedRequest:
     """Refuse: the REST API has no site DELETE (``SiteDetailView`` serves GET and POST)."""
-    del domain
+    del domain, dry_run
     raise not_over_rest("site delete", "it exists only as `manage.py site --delete`")
 
 
@@ -351,13 +366,15 @@ def review_site(*, domain: str | None = None) -> ReviewSite:
     raise not_over_rest("site review", "it exists only as `manage.py site --review`")
 
 
+@writes
 def select_site(
     *,
     domain: str | None = None,
     project_name: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
-) -> SelectSite:
+    dry_run: bool = False,
+) -> SelectSite | PlannedRequest:
     """Record the site later commands act on when ``--domain`` is not given.
 
     Written as the profile's ``site``; ``ENINESITES_SITE`` and ``--domain`` still win. The site
@@ -369,11 +386,17 @@ def select_site(
     if not domain or not domain.strip():
         raise ApiError("site select: --domain is required")
     chosen = domain.strip().lower()
-    client = connect(api_key, base_url, project_name, chosen)
+    client = connect(api_key, base_url, project_name, chosen, dry_run=dry_run)
     try:
         client.json("GET", client.site_path("configure"))
     except ApiError as exc:
-        raise ApiError(f"site select: {chosen} was not saved: {exc}") from exc
+        raise exc.reworded(f"site select: {chosen} was not saved: {exc}") from exc
+    if dry_run:
+        raise dryrun.Planned(
+            "WRITE",
+            str(client.settings.config_path),
+            body={"profile": client.settings.project_name, "site": chosen},
+        )
     path = config.update_profile(client.settings.project_name, site=chosen)
     return {
         "project_name": client.settings.project_name,
@@ -382,15 +405,17 @@ def select_site(
     }
 
 
+@writes
 def randomize_subdomain_site(
     *,
     domain: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> RandomizeSubdomainSite:
+    dry_run: bool = False,
+) -> RandomizeSubdomainSite | PlannedRequest:
     """Give the site a new random subdomain: ``POST /api/v1/site/<d>/random-subdomain/``."""
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     payload = client.json("POST", client.site_path("random-subdomain"))
     return {
         "domain": credentials.require_site(client.settings),
@@ -409,9 +434,12 @@ def propose_site(
     )
 
 
-def build_site(*, proposal: str | None = None) -> BuildSite:
+@writes
+def build_site(
+    *, proposal: str | None = None, dry_run: bool = False
+) -> BuildSite | PlannedRequest:
     """Refuse: building a site from a proposal is the chat tool ``build_site_from_spec``."""
-    del proposal
+    del proposal, dry_run
     raise not_over_rest(
         "site build", "it exists only as the chat tool `build_site_from_spec`"
     )

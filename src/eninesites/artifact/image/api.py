@@ -20,6 +20,7 @@ from collections.abc import Callable
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
 from eninesites.lib.client.records import project, required, required_int, rows
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import AttachImage, DetachImage, GetImage, ImageRow, ListImage
 
@@ -42,6 +43,7 @@ def list_image(
     return {"count": len(found), "results": found}
 
 
+@writes
 def attach_image(
     *,
     slug: str | None = None,
@@ -50,10 +52,11 @@ def attach_image(
     base_url: str | None = None,
     project_name: str | None = None,
     media: str | None = None,
-) -> AttachImage:
+    dry_run: bool = False,
+) -> AttachImage | PlannedRequest:
     """Add a media item to the gallery (idempotent): ``POST .../images/``."""
     image = required_int(media, "--media", "the media item's id, from `media list`")
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     path = client.site_path("artifacts", required(slug, "--slug", SLUG), "images")
     result: AttachImage = project(
         client.json("POST", path, body={"image": image}), AttachImage
@@ -80,6 +83,7 @@ def get_image(
     return result
 
 
+@writes
 def detach_image(
     *,
     slug: str | None = None,
@@ -88,10 +92,11 @@ def detach_image(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> DetachImage:
+    dry_run: bool = False,
+) -> DetachImage | PlannedRequest:
     """Remove a gallery entry (the media item stays): ``DELETE .../images/<id>/`` (204)."""
     entry = required(id_, "--id", ENTRY)
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     target = required(slug, "--slug", SLUG)
     client.request("DELETE", client.site_path("artifacts", target, "images", entry))
     return {

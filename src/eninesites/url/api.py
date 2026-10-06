@@ -23,6 +23,7 @@ from eninesites.errors import ApiError
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
 from eninesites.lib.client.records import project, request_body, required, rows
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import CreateUrl, DeleteUrl, GetUrl, ListUrl, UpdateUrl, UrlRow
 
@@ -42,6 +43,7 @@ def list_url(
     return {"count": len(found), "results": found}
 
 
+@writes
 def create_url(
     *,
     domain: str | None = None,
@@ -49,7 +51,8 @@ def create_url(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> CreateUrl:
+    dry_run: bool = False,
+) -> CreateUrl | PlannedRequest:
     """Add an entry: ``POST .../urls/``; the ``--data`` file holds ``label``, ``url``."""
     body = request_body(data)
     if not body.get("url"):
@@ -57,7 +60,7 @@ def create_url(
             "url create: the --data file must hold at least 'url', e.g. "
             '{"label": "Docs", "url": "https://example.com/docs"}'
         )
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     result: CreateUrl = project(
         client.json("POST", client.site_path("urls"), body=body), CreateUrl
     )
@@ -80,6 +83,7 @@ def get_url(
     return result
 
 
+@writes
 def update_url(
     *,
     name: str | None = None,
@@ -88,17 +92,19 @@ def update_url(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> UpdateUrl:
+    dry_run: bool = False,
+) -> UpdateUrl | PlannedRequest:
     """Change the fields in ``--data``: ``POST .../urls/<name>/`` (partial)."""
     body = request_body(data)
     if not body:
         raise ApiError("url update: --data is required (the fields to change)")
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     path = client.site_path("urls", required(name, "--name", NAME))
     result: UpdateUrl = project(client.json("POST", path, body=body), UpdateUrl)
     return result
 
 
+@writes
 def delete_url(
     *,
     name: str | None = None,
@@ -106,9 +112,10 @@ def delete_url(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> DeleteUrl:
+    dry_run: bool = False,
+) -> DeleteUrl | PlannedRequest:
     """Delete an entry: ``DELETE .../urls/<name>/`` (204)."""
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     name = required(name, "--name", NAME)
     client.request("DELETE", client.site_path("urls", name))
     return {

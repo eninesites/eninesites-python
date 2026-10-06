@@ -20,6 +20,7 @@ from collections.abc import Callable
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
 from eninesites.lib.client.records import not_over_rest, rows
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import (
     CheckTheme,
@@ -31,9 +32,12 @@ from .lib.results import (
 )
 
 
-def create_theme(*, name: str | None = None) -> CreateTheme:
+@writes
+def create_theme(
+    *, name: str | None = None, dry_run: bool = False
+) -> CreateTheme | PlannedRequest:
     """Refuse: scaffolding a theme is ``manage.py theme --create``."""
-    del name
+    del name, dry_run
     raise not_over_rest("theme create", "it exists only as `manage.py theme --create`")
 
 
@@ -54,9 +58,12 @@ def list_theme(
     }
 
 
-def delete_theme(*, name: str | None = None, force: bool = False) -> DeleteTheme:
+@writes
+def delete_theme(
+    *, name: str | None = None, force: bool = False, dry_run: bool = False
+) -> DeleteTheme | PlannedRequest:
     """Refuse: deleting a theme is ``manage.py theme --delete``."""
-    del name, force
+    del name, force, dry_run
     raise not_over_rest("theme delete", "it exists only as `manage.py theme --delete`")
 
 

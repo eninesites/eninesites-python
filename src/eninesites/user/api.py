@@ -20,6 +20,7 @@ from collections.abc import Callable
 
 from eninesites.lib.client.http import connect
 from eninesites.lib.client.records import project, required, rows
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import AddUser, GetUser, ListUser, UpdateUser, UserRow
 
@@ -40,6 +41,7 @@ def list_user(
     return {"count": len(found), "results": found}
 
 
+@writes
 def add_user(
     *,
     username: str | None = None,
@@ -48,13 +50,14 @@ def add_user(
     base_url: str | None = None,
     project_name: str | None = None,
     role: str | None = None,
-) -> AddUser:
+    dry_run: bool = False,
+) -> AddUser | PlannedRequest:
     """Make an existing user a member with ``--role``: ``POST .../users/``."""
     body = {
         "username": required(username, "--username", USERNAME),
         "role": required(role, "--role", ROLE),
     }
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     result: AddUser = project(
         client.json("POST", client.site_path("users"), body=body), AddUser
     )
@@ -76,6 +79,7 @@ def get_user(
     return result
 
 
+@writes
 def update_user(
     *,
     username: str | None = None,
@@ -84,10 +88,11 @@ def update_user(
     base_url: str | None = None,
     project_name: str | None = None,
     role: str | None = None,
-) -> UpdateUser:
+    dry_run: bool = False,
+) -> UpdateUser | PlannedRequest:
     """Change a member's role: ``POST .../users/<username>/`` with ``{"role": ...}``."""
     body = {"role": required(role, "--role", ROLE)}
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     path = client.site_path("users", required(username, "--username", USERNAME))
     result: UpdateUser = project(client.json("POST", path, body=body), UpdateUser)
     return result

@@ -23,6 +23,7 @@ from typing import Any
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import Client, connect
 from eninesites.lib.client.records import required
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import AssignRole, ListRole, ReplaceRole, Roles, UnassignRole
 
@@ -54,6 +55,7 @@ def list_role(
     )
 
 
+@writes
 def replace_role(
     *,
     slug: str | None = None,
@@ -62,15 +64,17 @@ def replace_role(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> ReplaceRole:
+    dry_run: bool = False,
+) -> ReplaceRole | PlannedRequest:
     """Replace every role with ``--role`` (comma-separated; ``""`` clears): ``PUT .../roles/``."""
     codes = [c.strip() for c in (role or "").split(",") if c.strip()]
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     target = required(slug, "--slug", SLUG)
     path = client.site_path("artifacts", target, "roles")
     return _roles(client, target, client.json("PUT", path, body={"roles": codes}))
 
 
+@writes
 def assign_role(
     *,
     slug: str | None = None,
@@ -79,19 +83,21 @@ def assign_role(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> AssignRole:
+    dry_run: bool = False,
+) -> AssignRole | PlannedRequest:
     """Add one role (idempotent): ``POST .../roles/`` with ``{"role": <code>}``."""
     code = required(
         role,
         "--role",
         "a role code: article, faq, org, person, place, product, review or service",
     )
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     target = required(slug, "--slug", SLUG)
     path = client.site_path("artifacts", target, "roles")
     return _roles(client, target, client.json("POST", path, body={"role": code}))
 
 
+@writes
 def unassign_role(
     *,
     slug: str | None = None,
@@ -100,14 +106,15 @@ def unassign_role(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> UnassignRole:
+    dry_run: bool = False,
+) -> UnassignRole | PlannedRequest:
     """Remove one role: GET the codes, then PUT them back without it (no-op if absent)."""
     code = required(
         role,
         "--role",
         "a role code: article, faq, org, person, place, product, review or service",
     )
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     target = required(slug, "--slug", SLUG)
     path = client.site_path("artifacts", target, "roles")
     current = _roles(client, target, client.get(path))

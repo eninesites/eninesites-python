@@ -14,6 +14,7 @@ import pytest
 from conftest import API_KEY, FakeServer
 
 from eninesites import __main__ as cli
+from eninesites.lib import dryrun
 from eninesites.root import api
 
 # One real call per verb, for the test that checks each result against its type.
@@ -21,6 +22,7 @@ SAMPLES: dict[str, dict[str, Any]] = {
     "login": {"api_key": API_KEY},
     "logout": {},
     "config": {},
+    "describe": {},
 }
 
 # Verbs with no REST endpoint: they refuse instead of returning.
@@ -113,8 +115,10 @@ def test_login_with_nothing_to_read_refuses(
 def test_login_keeps_a_dev_base_url_with_the_key(server: FakeServer) -> None:
     from eninesites.lib.client import config  # pylint: disable=import-outside-toplevel
 
-    result = api.login_root(
-        api_key=API_KEY, base_url="http://localhost:8000", project_name="dev"
+    result = dryrun.done(
+        api.login_root(
+            api_key=API_KEY, base_url="http://localhost:8000", project_name="dev"
+        )
     )
     assert result["base_url"] == "http://localhost:8000"
     assert config.load()["dev"] == {

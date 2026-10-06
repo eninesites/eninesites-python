@@ -23,6 +23,7 @@ from eninesites.errors import ApiError
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
 from eninesites.lib.client.records import project, request_body, required
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import AeoRow, CreateAeo, DeleteAeo, GetAeo, UpdateAeo
 
@@ -57,13 +58,15 @@ def _write(
     slug: str | None,
     data: Path | None,
     connection: tuple[str | None, str | None, str | None, str | None],
+    *,
+    dry_run: bool,
 ) -> tuple[str, str, AeoRow]:
     body = request_body(data)
     if not body:
         raise ApiError(
             f"artifact aeo {verb}: --data is required (the six-W fields to set)"
         )
-    client = connect(*connection)
+    client = connect(*connection, dry_run=dry_run)
     target = required(slug, "--slug", SLUG)
     payload = client.json(
         method, client.site_path("artifacts", target, "aeo"), body=body
@@ -71,6 +74,7 @@ def _write(
     return credentials.require_site(client.settings), target, project(payload, AeoRow)
 
 
+@writes
 def create_aeo(
     *,
     slug: str | None = None,
@@ -79,14 +83,21 @@ def create_aeo(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> CreateAeo:
+    dry_run: bool = False,
+) -> CreateAeo | PlannedRequest:
     """Create or replace the XEO data from ``--data``: ``POST .../aeo/``."""
     site, target, aeo = _write(
-        "POST", "create", slug, data, (api_key, base_url, project_name, domain)
+        "POST",
+        "create",
+        slug,
+        data,
+        (api_key, base_url, project_name, domain),
+        dry_run=dry_run,
     )
     return {"domain": site, "slug": target, "aeo": aeo}
 
 
+@writes
 def update_aeo(
     *,
     slug: str | None = None,
@@ -95,14 +106,21 @@ def update_aeo(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> UpdateAeo:
+    dry_run: bool = False,
+) -> UpdateAeo | PlannedRequest:
     """Change only the fields in ``--data``: ``PATCH .../aeo/``."""
     site, target, aeo = _write(
-        "PATCH", "update", slug, data, (api_key, base_url, project_name, domain)
+        "PATCH",
+        "update",
+        slug,
+        data,
+        (api_key, base_url, project_name, domain),
+        dry_run=dry_run,
     )
     return {"domain": site, "slug": target, "aeo": aeo}
 
 
+@writes
 def delete_aeo(
     *,
     slug: str | None = None,
@@ -110,9 +128,10 @@ def delete_aeo(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> DeleteAeo:
+    dry_run: bool = False,
+) -> DeleteAeo | PlannedRequest:
     """Delete the artifact's XEO data: ``DELETE .../aeo/`` (204)."""
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     target = required(slug, "--slug", SLUG)
     client.request("DELETE", client.site_path("artifacts", target, "aeo"))
     return {

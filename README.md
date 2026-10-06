@@ -119,6 +119,38 @@ A command is `python -m eninesites.<noun> <verb> [options]`; a sub-noun is dotte
 `site create` puts a new site on the server's default plan unless you pass `--plan`. A site on
 a plan without API access cannot be managed with this CLI; pass a plan that includes it.
 
+## For agents and scripts
+
+Every command keeps the form `python -m eninesites.<noun> <verb> [options]`. Four things make
+it usable without reading its help:
+
+- **`--json` on every verb** prints the result, and nothing else, on stdout as one JSON
+  document.
+- **A refusal is JSON too.** Under `--json`, a command that cannot run writes one JSON document
+  on stderr and exits 2:
+
+  ```json
+  {"status": 404, "code": "not_found", "detail": "...", "errors": null,
+   "method": "GET", "path": "/api/v1/site/example.com/artifacts/nope/"}
+  ```
+
+  `code` is the server's own when it sent one (`not_found`, `permission_denied`,
+  `validation_error`, `site_already_exists`, ...), so an agent can decide what to do next:
+  create the thing, stop, or retry. With no server code it is the client's: `refused` (bad
+  input; nothing was sent), `unreachable`, `timeout`, `redirect_refused`, `not_problem` (an
+  error reply that is not problem details), `not_json`, `not_available` (no REST endpoint) or
+  `usage` (the command line itself was wrong; no help text is printed under `--json`).
+  `errors` holds the server's per-field errors on a validation failure.
+- **`--dry-run` on every write verb** shows the request the verb would send and sends nothing:
+  `{"dry_run": true, "method": "DELETE", "path": "...", "body": ...}`. A dry run still sends the
+  verb's GETs, so it needs the server and a key. `login`, `logout` and `site select` show the
+  config-file change instead (`WRITE` or `REMOVE`).
+- **`python -m eninesites describe --json`** lists every command at once: what to type, whether
+  it writes, each flag, and the JSON Schema of its output, plus the shapes of a refusal and of a
+  dry run.
+
+Exit codes: 0 done, 1 ran and found something to report, 2 could not run.
+
 ## Commands
 
 | Noun | Verbs |

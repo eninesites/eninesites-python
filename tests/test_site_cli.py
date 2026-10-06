@@ -13,6 +13,7 @@ from typing import Any, Callable
 import pytest
 from conftest import FakeServer
 
+from eninesites.lib import dryrun
 from eninesites.site import __main__ as cli
 from eninesites.site import api
 
@@ -131,7 +132,7 @@ def test_load_sends_the_file_and_points_a_zip_at_restore(server: FakeServer) -> 
 
 
 def test_restore_sends_the_mode_and_the_archive(server: FakeServer) -> None:
-    result = api.restore_site(path=Path("site.zip"), mode="replace")
+    result = dryrun.done(api.restore_site(path=Path("site.zip"), mode="replace"))
     assert result["mode"] == "replace"
     assert server.last.query == {"mode": ["replace"]}
     assert server.last.body is not None and b'filename="site.zip"' in server.last.body

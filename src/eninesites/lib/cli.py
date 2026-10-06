@@ -36,9 +36,11 @@ from __future__ import annotations
 import argparse
 import ast
 import contextlib
+import contextvars
 import copy
 import difflib
 import io
+import json
 import sys
 from collections.abc import Callable, Iterable
 from gettext import gettext
@@ -57,6 +59,12 @@ ONE_OF = gettext("one of the arguments %s is required").split("%s", maxsplit=1)
 
 #: Where a verb's parser records itself on the namespace when argparse chooses it.
 _CHOSEN = "_cli_verb_parser"
+
+#: Whether the command line being parsed asked for ``--json``; `parse_args` sets it, and
+#: `VerbParser.error` reads it, because argparse gives `error` no access to the arguments.
+_JSON_ASKED: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "json_asked", default=False
+)
 
 
 #: Section order and heading for a grouped listing (`print_commands(kinds=...)`). The
@@ -172,19 +180,30 @@ class VerbParser(argparse.ArgumentParser):
     command line, which `parse_args` reports first.
     Anything else prints the help to stderr, then argparse's own message as the last line,
     and exits 2. stdout stays empty in every case, so under `--json` it never holds text.
+
+    Intentional divergence from racecar CLI.md B2-B5 under ``--json``: when the command line
+    asked for ``--json``, stderr carries only one JSON document, the shape of
+    ``eninesites.errors.ErrorResult`` with ``code`` ``usage``, and no help, so an agent reads
+    what was wrong as data (``python -m eninesites describe`` holds the help as data). Owner
+    decision, 2026-10-06; proposed to racecar for the template.
     """
 
     def error(self, message: str) -> NoReturn:
-        """Answer a bad invocation: help, then what was wrong."""
+        """Answer a bad invocation: help, then what was wrong; or, under --json, the JSON."""
         needed = None
         if message.startswith(MISSING):
             needed = message[len(MISSING) :]
         elif message.startswith(ONE_OF[0]) and message.endswith(ONE_OF[1]):
             needed = " or ".join(message[len(ONE_OF[0]) : -len(ONE_OF[1])].split())
+        said = (
+            f"{self.prog}: needs {needed}"
+            if needed is not None
+            else f"{self.prog}: error: {message}"
+        )
+        if _JSON_ASKED.get():
+            self.exit(2, usage_record(said))
         self.print_help(sys.stderr)
-        if needed is not None:
-            self.exit(2, f"{self.prog}: needs {needed}\n")
-        self.exit(2, f"{self.prog}: error: {message}\n")
+        self.exit(2, said + "\n")
 
 
 class NounParser(VerbParser):
@@ -270,6 +289,22 @@ class NounParser(VerbParser):
         return unknown_verb(typed, list(action.choices))
 
 
+def usage_record(detail: str) -> str:
+    """A usage error as one JSON line, in the shape of ``eninesites.errors.ErrorResult``.
+
+    Built here rather than imported, because this module imports the standard library only.
+    """
+    record = {
+        "status": None,
+        "code": "usage",
+        "detail": detail,
+        "errors": None,
+        "method": None,
+        "path": None,
+    }
+    return json.dumps(record, indent=2, ensure_ascii=False) + "\n"
+
+
 def mark_subparsers(sub: Any) -> None:
     """Make every verb parser under `sub` record itself when argparse chooses it.
 
@@ -325,6 +360,15 @@ def parse_args(
     opens a file.
     """
     argv = list(sys.argv[1:] if argv is None else argv)
+    asked = _JSON_ASKED.set("--json" in argv)
+    try:
+        return _parse(parser, argv, namespace)
+    finally:
+        _JSON_ASKED.reset(asked)
+
+
+def _parse(parser: argparse.ArgumentParser, argv: list[str], namespace: Any) -> Any:
+    """`parse_args`'s body: look for unknown arguments relaxed, then parse for real."""
     relaxed = _relax(parser, set())
     # The relaxed pass only LOOKS for unknown arguments. Anything it would print or exit on
     # -- `--help`, a bad value, an unknown verb -- is discarded and left to the real pass,
@@ -359,13 +403,15 @@ def run(
     refusal: type[Exception],
     error: Callable[[str], None],
     listing: Callable[[], None] | None = None,
+    json_error: Callable[[Any], None] | None = None,
 ) -> int:
     """The body of a noun's `main(argv)`: parse, run the chosen verb, map a refusal to an exit.
 
     With no verb it describes and acts on nothing (CLI.md B1): `listing` when the noun has
     sub-nouns, its help otherwise. A verb runs as the `func` its parser was bound to. An
-    exception of type `refusal` (the package's `ApiError`) has its message handed to `error`
-    and its `exit_code` returned, 2 when it carries none. Shared here because every noun's
+    exception of type `refusal` (the package's `ApiError`) has its message handed to `error`,
+    or under `--json` the exception itself to `json_error` when given, and its `exit_code`
+    returned, 2 when it carries none. Shared here because every noun's
     `main` is this and nothing else; each noun keeps its own two-line `main` that calls it.
     """
     args = parse_args(parser, argv)
@@ -375,7 +421,10 @@ def run(
     try:
         return int(args.func(args))
     except refusal as exc:
-        error(str(exc))
+        if json_error is not None and getattr(args, "json", False):
+            json_error(exc)
+        else:
+            error(str(exc))
         return int(getattr(exc, "exit_code", 2))
 
 

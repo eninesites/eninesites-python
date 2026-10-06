@@ -21,6 +21,7 @@ from eninesites.errors import ApiError
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
 from eninesites.lib.client.records import project, request_body, required
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import DesignRow, GetDesign, UpdateDesign
 
@@ -49,6 +50,7 @@ def get_design(
     }
 
 
+@writes
 def update_design(
     *,
     slug: str | None = None,
@@ -57,7 +59,8 @@ def update_design(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> UpdateDesign:
+    dry_run: bool = False,
+) -> UpdateDesign | PlannedRequest:
     """Set design fields from the ``--data`` JSON file, e.g. ``{"card_template": "card-media"}``.
 
     ``POST .../design/``: creates the design when absent, else updates the fields given.
@@ -67,7 +70,7 @@ def update_design(
         raise ApiError(
             "artifact design update: --data is required (the design fields to set)"
         )
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     target = required(slug, "--slug", SLUG)
     payload = client.json(
         "POST", client.site_path("artifacts", target, "design"), body=body

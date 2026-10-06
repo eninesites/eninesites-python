@@ -22,6 +22,7 @@ from eninesites.errors import ApiError
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
 from eninesites.lib.client.records import json_file, project
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import CustomTheme, ExportCustom, ImportCustom
 
@@ -48,6 +49,7 @@ def export_custom(
     }
 
 
+@writes
 def import_custom(
     *,
     name: str | None = None,
@@ -57,7 +59,8 @@ def import_custom(
     base_url: str | None = None,
     project_name: str | None = None,
     path: Path | None = None,
-) -> ImportCustom:
+    dry_run: bool = False,
+) -> ImportCustom | PlannedRequest:
     """Import a custom theme from a JSON file: ``POST .../custom-themes/``.
 
     ``--path`` is either an export (``theme custom export --json`` output, or the bare
@@ -81,7 +84,7 @@ def import_custom(
                 f"theme custom import: --{key} is required (or in the --path file)"
             )
     theme.setdefault("templates", {})
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     payload = client.json(
         "POST", client.site_path("custom-themes"), body={"custom_theme": theme}
     )

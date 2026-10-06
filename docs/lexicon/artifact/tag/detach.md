@@ -2,7 +2,7 @@
 name: detach
 kind: verb
 domain: [eninesites]
-params: [slug, tag, domain, api-key, base-url, project-name]
+params: [slug, tag, domain, api-key, base-url, project-name, dry-run]
 invocations: [""]
 summary: "Remove tag from artifact"
 pnode: [./README.md]

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import TypedDict
 
+from eninesites.lib.jsonvalue import Json
+
 
 class LoginRoot(TypedDict):
     """What ``login`` returns: the project the key was stored under, and the check it passed."""
@@ -44,3 +46,45 @@ class ConfigRoot(TypedDict):
     api_key_source: str | None
     site: str | None
     site_source: str | None
+
+
+class Arg(TypedDict):
+    """One flag a verb takes, named as racecar's CLI audit names it (its ``Arg``)."""
+
+    dest: str
+    flags: list[str]
+    help: str | None
+    required: bool
+    choices: list[str] | None
+    default: Json
+    type: str | None
+    action: str | None
+
+
+class Command(TypedDict):
+    """One runnable command: what to type, whether it writes, its flags and its result.
+
+    ``output`` is the JSON Schema of what ``--json`` prints, as JSON text: a schema nests
+    deeper than a result may (``lib.jsonvalue``), so it is carried as a string to parse.
+    """
+
+    command: str
+    noun: str
+    verb: str
+    description: str
+    writes: bool
+    args: list[Arg]
+    output: str
+
+
+class DescribeRoot(TypedDict):
+    """What ``describe`` returns: every command, and the shapes every command shares.
+
+    ``error`` is the JSON Schema of the refusal ``--json`` writes on stderr, ``planned`` that
+    of a write verb's ``--dry-run`` result, both as JSON text like ``Command.output``.
+    """
+
+    commands: list[Command]
+    error: str
+    planned: str
+    exit_codes: dict[str, str]

@@ -46,3 +46,18 @@ def table(rows: Sequence[Mapping[str, Any]], columns: Sequence[str]) -> None:
 def line(text: str) -> None:
     """One line of plain text."""
     print(text)
+
+
+def planned(result: Mapping[str, Any]) -> None:
+    """A write verb's dry run: the request it would have sent, and that nothing was sent."""
+    query = result.get("query")
+    target = result["path"] + (f"?{cell(query)}" if query else "")
+    verb = "write" if result["method"] in ("WRITE", "REMOVE") else "send"
+    print(f"would {verb}: {result['method']} {target}")
+    if result.get("body") is not None:
+        print(json.dumps(result["body"], indent=2, ensure_ascii=False))
+    if result.get("form"):
+        print(f"form: {cell(result['form'])}")
+    if result.get("files"):
+        print(f"files: {', '.join(result['files'])}")
+    print("Dry run: nothing was sent or written.")

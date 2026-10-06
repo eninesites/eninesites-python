@@ -27,6 +27,7 @@ from eninesites.lib.client.records import (
     required,
     rows,
 )
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import (
     CandidateRow,
@@ -61,6 +62,7 @@ def list_map(
     return {"count": len(found), "results": found}
 
 
+@writes
 def create_map(
     *,
     slug: str | None = None,
@@ -69,7 +71,8 @@ def create_map(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> CreateMap:
+    dry_run: bool = False,
+) -> CreateMap | PlannedRequest:
     """Map the artifact to another: ``POST .../maps/``; the ``--data`` file holds ``artifact_b``."""
     body = request_body(data)
     if "artifact_b" not in body:
@@ -77,7 +80,7 @@ def create_map(
             'artifact map create: the --data file must name the target, e.g. {"artifact_b": 42} '
             "(`artifact map candidates` lists valid ids)"
         )
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     path = client.site_path("artifacts", required(slug, "--slug", SLUG), "maps")
     result: CreateMap = project(client.json("POST", path, body=body), CreateMap)
     return result
@@ -101,6 +104,7 @@ def get_map(
     return result
 
 
+@writes
 def update_map(
     *,
     slug: str | None = None,
@@ -110,12 +114,13 @@ def update_map(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> UpdateMap:
+    dry_run: bool = False,
+) -> UpdateMap | PlannedRequest:
     """Change the fields in ``--data`` (e.g. ``order``): ``POST .../maps/<id>/`` (partial)."""
     body = request_body(data)
     if not body:
         raise ApiError("artifact map update: --data is required (the fields to change)")
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     path = client.site_path(
         "artifacts", required(slug, "--slug", SLUG), "maps", _id(id_)
     )
@@ -123,6 +128,7 @@ def update_map(
     return result
 
 
+@writes
 def delete_map(
     *,
     slug: str | None = None,
@@ -131,9 +137,10 @@ def delete_map(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> DeleteMap:
+    dry_run: bool = False,
+) -> DeleteMap | PlannedRequest:
     """Delete one edge: ``DELETE .../maps/<id>/`` (204)."""
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     target, edge = required(slug, "--slug", SLUG), _id(id_)
     client.request("DELETE", client.site_path("artifacts", target, "maps", edge))
     return {

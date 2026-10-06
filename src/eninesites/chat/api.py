@@ -17,20 +17,25 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from eninesites.lib.client.records import not_over_rest
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import MagicLinkChat, StreamChat
 
 
-def stream_chat() -> StreamChat:
+@writes
+def stream_chat(*, dry_run: bool = False) -> StreamChat | PlannedRequest:
     """Refuse: chat streaming authenticates by browser session only, not by API key."""
+    del dry_run
     raise not_over_rest(
         "chat stream",
         "/api/chat/stream/ authenticates by browser session only, so an API key is ignored",
     )
 
 
-def magic_link_chat() -> MagicLinkChat:
+@writes
+def magic_link_chat(*, dry_run: bool = False) -> MagicLinkChat | PlannedRequest:
     """Refuse: the magic-link endpoint is CSRF-protected, so only a browser can call it."""
+    del dry_run
     raise not_over_rest(
         "chat magic-link",
         "/api/chat/magic-link/ is CSRF-protected, so only a browser session can call it",

@@ -75,7 +75,14 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     """Run one verb; with none, list the sub-nouns, or print the help when there are none."""
     listing = _print_commands if commands() else None
-    return run(parser(), argv, refusal=ApiError, error=plaintext.error, listing=listing)
+    return run(
+        parser(),
+        argv,
+        refusal=ApiError,
+        error=plaintext.error,
+        listing=listing,
+        json_error=json_renderer.error,
+    )
 
 
 def output() -> list[tuple[dict[str, object], dict[str, object]]]:

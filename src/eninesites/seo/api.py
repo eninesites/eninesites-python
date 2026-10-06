@@ -23,6 +23,7 @@ from eninesites.errors import ApiError
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
 from eninesites.lib.client.records import project, request_body, required, rows
+from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import (
     CreateSeo,
@@ -49,6 +50,7 @@ def list_seo(
     return {"count": len(found), "results": found}
 
 
+@writes
 def create_seo(
     *,
     domain: str | None = None,
@@ -56,7 +58,8 @@ def create_seo(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> CreateSeo:
+    dry_run: bool = False,
+) -> CreateSeo | PlannedRequest:
     """Create an SEO page: ``POST .../seo/pages/``.
 
     The ``--data`` file holds ``canonical`` and any of ``page_name``, ``page_title``,
@@ -68,7 +71,7 @@ def create_seo(
             "seo create: the --data file lacks canonical; it holds e.g. "
             '{"canonical": "https://example.com/about/", "page_title": "About us"}'
         )
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     payload = client.json("POST", client.site_path("seo", "pages"), body=body)
     result: CreateSeo = project(payload, CreateSeo)
     return result
@@ -91,6 +94,7 @@ def get_seo(
     return result
 
 
+@writes
 def update_seo(
     *,
     id_: str | None = None,
@@ -99,18 +103,20 @@ def update_seo(
     base_url: str | None = None,
     project_name: str | None = None,
     data: Path | None = None,
-) -> UpdateSeo:
+    dry_run: bool = False,
+) -> UpdateSeo | PlannedRequest:
     """Change the fields in ``--data``: ``POST .../seo/pages/<id>/`` (partial)."""
     entry = required(id_, "--id", ID)
     body = request_body(data)
     if not body:
         raise ApiError("seo update: --data is required (the fields to change)")
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     payload = client.json("POST", client.site_path("seo", "pages", entry), body=body)
     result: UpdateSeo = project(payload, UpdateSeo)
     return result
 
 
+@writes
 def delete_seo(
     *,
     id_: str | None = None,
@@ -118,10 +124,11 @@ def delete_seo(
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
-) -> DeleteSeo:
+    dry_run: bool = False,
+) -> DeleteSeo | PlannedRequest:
     """Delete an SEO page: ``DELETE .../seo/pages/<id>/`` (204)."""
     entry = required(id_, "--id", ID)
-    client = connect(api_key, base_url, project_name, domain)
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     client.request("DELETE", client.site_path("seo", "pages", entry))
     return {
         "domain": credentials.require_site(client.settings),

@@ -80,6 +80,24 @@ def upgrade_tally(result: dict[str, list[dict[str, str]]]) -> str:
     )
 
 
+def upgrade_warning(result: dict[str, list[dict[str, str]]]) -> str | None:
+    """`upgrade`'s closing WARNING when the cli still does not conform, else None.
+
+    Skipping the judgment work is allowed, so this warns and does not stop anything; it
+    says what not conforming costs, because the cost arrives later and elsewhere.
+    """
+    left = len(result["remaining"])
+    if not left:
+        return None
+    return (
+        f"WARNING: the cli does not conform to racecar's canonical form ({left} item(s) "
+        "above). Until it does, `surface create` refuses new nouns, and racecar changes "
+        "that assume the form can fail when they arrive: a `cli.py` that imports "
+        "`lib/error/` stops at import in a package without it. Run `python3 "
+        ".racecar/scripts/surface.py upgrade --surface cli`, then the items it leaves."
+    )
+
+
 def listing(found: list[dict[str, str]], faces: int) -> list[str]:
     """`list`: each declared noun and verb, and whether the face binds it, in columns."""
     width = max((len(r["noun"]) for r in found), default=0)

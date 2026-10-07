@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from lib.lexicon import _audit
+from lib.lexicon._corpora import Lexicon
 from lib.lexicon._eligible import eligible_nouns
 from lib.lexicon._graph import Graph
 from lib.lexicon._loop import Checked, matrix
@@ -57,7 +58,9 @@ def long_flags_at(sites_by_flag: dict[str, set[str]], site: str, verb: str) -> s
     }
 
 
-def status_rows(terms: Path, root: Path, selected: list[str]) -> list[dict[str, Any]]:
+def status_rows(
+    lexicon: Lexicon, root: Path, selected: list[str]
+) -> list[dict[str, Any]]:
     """Every `(domain, noun, verb, params)` row, each carrying whether it is DECLARED and
     whether it is IMPLEMENTED.
 
@@ -79,14 +82,14 @@ def status_rows(terms: Path, root: Path, selected: list[str]) -> list[dict[str, 
     rows_out: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
 
-    for chain, node in sorted(eligible_nouns(terms, selected).items()):
+    for chain, node in sorted(eligible_nouns(lexicon, selected).items()):
         # The gather has already dropped anything outside `selected`, so this
         # intersection is never empty -- it picks WHICH of the node's domains
         # labels the row.
         doms = domains_of(node) or [DEFAULT_DOMAIN]
         # The empty chain is the root package. Its row is named for the package, which
         # is what its node declares.
-        noun = ".".join(chain) or root_noun(terms)
+        noun = ".".join(chain) or root_noun(lexicon)
         dotted = ".".join((pkg.name, *chain)) if pkg else noun
         # BOTH routes, unioned. The projection accepts either `src/<pkg>/<noun>/` or a
         # delivered `scripts/<noun>.py`, and the CLI audit only ever sees the first, so a
@@ -102,11 +105,11 @@ def status_rows(terms: Path, root: Path, selected: list[str]) -> list[dict[str, 
         # stopped.
         from_script = _audit.script_surface(root, noun) if len(chain) == 1 else {}
         implemented = offered.get(dotted, set()) | set(from_script)
-        for verb in sorted(declared_verbs(terms, chain) | implemented):
+        for verb in sorted(declared_verbs(lexicon, chain) | implemented):
             seen.add((noun, verb))
             # `verb_node` rather than a local join: one home for the path, and the
             # root-noun case comes with it.
-            node_for = verb_node(terms, noun, verb)
+            node_for = verb_node(lexicon, noun, verb)
             declared_params = set(_params_of(node_for)) if node_for.exists() else set()
             live_params = long_flags_at(
                 declared_flags, site_noun(chain, pkg, noun), verb
@@ -147,7 +150,7 @@ def status_rows(terms: Path, root: Path, selected: list[str]) -> list[dict[str, 
                     # The corpus's own domain, not racecar's. This row is a verb THIS repo
                     # implements and never declared, so labelling it `racecar` in an
                     # adopter would name a fixer that has never heard of the verb.
-                    "domain": corpus_domain(terms),
+                    "domain": corpus_domain(lexicon),
                     "noun": noun,
                     "verb": verb,
                     "params": sorted(long_flags_at(declared_flags, noun, verb)),
@@ -182,7 +185,7 @@ class Reach(NamedTuple):
     params_cli: int | None
 
 
-def reach(terms: Path, root: Path, selected: list[str]) -> list[Reach]:
+def reach(lexicon: Lexicon, root: Path, selected: list[str]) -> list[Reach]:
     """Per noun, the lexicon's counts beside each route's."""
     pkg = package_dir(root)
     # Refused rather than emptied, for the reason `status_rows` states.
@@ -191,15 +194,15 @@ def reach(terms: Path, root: Path, selected: list[str]) -> list[Reach]:
     verb_args = _audit.cli_args(root) if _audit.has_cli(root) else {}
     out: list[Reach] = []
 
-    for chain in sorted(eligible_nouns(terms, selected)):
-        noun = ".".join(chain) or root_noun(terms)
+    for chain in sorted(eligible_nouns(lexicon, selected)):
+        noun = ".".join(chain) or root_noun(lexicon)
         dotted = ".".join((pkg.name, *chain)) if pkg else noun
         site = site_noun(chain, pkg, noun)
 
-        declared = declared_verbs(terms, chain)
+        declared = declared_verbs(lexicon, chain)
         want_params: set[str] = set()
         for verb in declared:
-            want_params |= set(_params_of(terms.joinpath(*chain) / f"{verb}.md"))
+            want_params |= set(_params_of(verb_node(lexicon, noun, verb)))
 
         script = _audit.script_surface(root, noun) if len(chain) == 1 else {}
         has_bin = bool(script) or (root / "scripts" / f"{noun}.py").is_file()
@@ -265,7 +268,7 @@ def document(g: Graph, run: Checked) -> dict[str, Any]:
                 "in_graph": r["in_graph"],
                 "implemented": r["implemented"],
             }
-            for r in status_rows(g.terms, g.root, selected)
+            for r in status_rows(g.lexicon, g.root, selected)
         ],
         "nouns": [
             {
@@ -277,7 +280,7 @@ def document(g: Graph, run: Checked) -> dict[str, Any]:
                 "params_bin": n.params_bin,
                 "params_cli": n.params_cli,
             }
-            for n in reach(g.terms, g.root, selected)
+            for n in reach(g.lexicon, g.root, selected)
         ],
         "findings": run.findings,
         "answers": matrix(run.answers, g.root),

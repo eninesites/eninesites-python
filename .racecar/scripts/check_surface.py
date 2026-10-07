@@ -49,6 +49,12 @@ Usage:
     python scripts/check_surface.py --root <path>   # grade another repo
     python scripts/check_surface.py --json
 
+Every shape is graded alike. The `cli` column and each row's `fn` are the package's, so with no
+package (`server`, `django`, `unknown`, or several packages with none named) they are skipped
+with a note in the owner's wording ("No package to check", or "Nothing to check" with no Django
+either); every other rule reads the row alone. With no row served on `rest` or `mcp` or
+declaring a scope, the scope rule says "did not check, nothing to check", never OK.
+
 Exit 0 when the spec and the tree agree (or no spec exists), 1 on any divergence,
 2 on a usage error.
 
@@ -64,9 +70,21 @@ import sys
 from pathlib import Path
 
 from lib.shared import _spec
-from lib.shared._root import package_root
+from lib.shared._python import repo_python
+from lib.shared._root import not_present, package_root
 
-# The walker runs in a SUBPROCESS with the target's `src` on sys.path. Importing an
+
+class ConfigError(SystemExit):
+    """The spec or the tree could not be read, so nothing was graded.
+
+    A `SystemExit`, so the command line aborts with the message exactly as it always has:
+    that abort is the contract the tests hold. Named, so a caller that composes checkers
+    (`racecar check`) can catch it and record "could not grade" instead of ending its run,
+    and never read it as a clean pass.
+    """
+
+
+# The walker runs in a SUBPROCESS, under the repo's own interpreter (`repo_python`). Importing an
 # arbitrary repo's package into this process would run its module-scope code inside the
 # checker, and a repo whose `__main__.py` does work at import (itself a §3 violation)
 # would take the checker down with it instead of being reported.
@@ -285,7 +303,7 @@ def _run(script: str, arg: str, root: Path) -> object:
     """
     try:
         proc = subprocess.run(
-            [sys.executable, "-c", script],
+            [repo_python(root), "-c", script],
             input=arg,
             capture_output=True,
             text=True,
@@ -295,15 +313,24 @@ def _run(script: str, arg: str, root: Path) -> object:
             timeout=120,
         )
     except subprocess.TimeoutExpired as exc:
-        raise SystemExit(
+        raise ConfigError(
             "check_surface: a target module's import hung the probe past 120s "
             f"({exc})"
         ) from exc
     if proc.returncode != 0:
-        raise SystemExit(
+        raise ConfigError(
             f"check_surface: could not walk the CLI tree — {proc.stderr.strip()[:400]}"
         )
-    return json.loads(proc.stdout)
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        # The probe prints one JSON document. Anything else on stdout came from the repo's
+        # own code at import (a module that prints when imported), so the answer cannot be
+        # read: nothing was graded, which is a ConfigError, never a crash or a pass.
+        raise ConfigError(
+            "check_surface: the probe's answer could not be read; something the repo "
+            f"imports printed to stdout: {proc.stdout.strip()[:200]!r}"
+        ) from exc
 
 
 def _env() -> dict[str, str]:
@@ -400,36 +427,18 @@ def requires_findings(rows: list[dict[str, object]], rel: object) -> list[str]:
     return findings
 
 
-def audit(root: Path) -> tuple[list[str], int, list[str]]:
-    """Return `(findings, rows graded, notes)`; no findings means the tree conforms.
+def _cli_findings(
+    root: Path, rel: Path, rows: list[dict[str, object]], pkg: str
+) -> tuple[list[str], list[str]]:
+    """`(findings, notes)` for the `cli` column: the spec's declared commands against the
+    command tree the package's `__main__.py` actually builds.
 
-    `notes` are the informational lines -- no spec to grade, verbs declared and not yet
-    built -- which are not findings. They are returned rather than printed so `main` decides
-    where they go: stdout beside the findings, or stderr under `--json`, where stdout is
-    exactly one JSON document and a line of prose ahead of it would make it unparseable.
-
-    The two passes below (`declared - built - proposed`, then `built - declared`) are
-    plain two-way set difference reconciling desired state (the spec) against actual
-    state (the probed tree) — the same shape as a Kubernetes controller's reconcile
-    loop, with `proposed` carved out as the one sanctioned lag between the two.
+    The one part of `audit` that needs a package, because a `cli` value names a
+    `python -m <pkg> ...` command. The two passes below (`declared - built - proposed`,
+    then `built - declared`) are plain two-way set difference reconciling desired state
+    (the spec) against actual state (the probed tree), with `proposed` carved out as the
+    one sanctioned lag between the two.
     """
-    located = _spec.find_spec(root)
-    if located is None:
-        return [], 0, ["no surface.jsonl — nothing to grade (info)"]
-    spec, pkg = located
-    if pkg is None:
-        return (
-            [],
-            0,
-            [
-                f"{spec}: no package under src/ to walk, so its cli column is ungraded (info)"
-            ],
-        )
-    try:
-        rows = _spec.read_rows(spec)
-    except _spec.SpecError as exc:
-        raise SystemExit(f"check_surface: {exc}") from exc
-    rel = spec.relative_to(root)
     # A library with no command line has no `__main__.py`, so there is no tree to walk:
     # importing `<pkg>.__main__` would only raise. Nothing is built, and the comparison
     # below still names any row that claims a command exists.
@@ -449,8 +458,8 @@ def audit(root: Path) -> tuple[list[str], int, list[str]]:
     proposed = {
         str(r["cli"]) for r in rows if r.get("cli") and r.get("status") == "proposed"
     }
-    findings = []
-    notes = []
+    findings: list[str] = []
+    notes: list[str] = []
 
     # A SPEC AHEAD OF ITS IMPLEMENTATION IS NOT A DEFECT. `proposed` is the state of
     # having decided what to build and not yet built it, which is strictly better than
@@ -484,13 +493,61 @@ def audit(root: Path) -> tuple[list[str], int, list[str]]:
             "the spec's owner declare it. Widening the spec to match is the same drift "
             "with the evidence erased."
         )
+    return findings, notes
+
+
+def audit(root: Path) -> tuple[list[str], int, list[str]]:
+    """Return `(findings, rows graded, notes)`; no findings means the tree conforms.
+
+    `notes` are the informational lines -- no spec to grade, verbs declared and not yet
+    built -- which are not findings. They are returned rather than printed so `main` decides
+    where they go: stdout beside the findings, or stderr under `--json`, where stdout is
+    exactly one JSON document and a line of prose ahead of it would make it unparseable.
+
+    The `cli` column is graded by `_cli_findings` when there is a package; every other rule
+    reads the rows alone and runs in every shape.
+    """
+    located = _spec.find_spec(root)
+    if located is None:
+        return [], 0, ["no surface.jsonl — nothing to grade (info)"]
+    spec, pkg = located
+    try:
+        rows = _spec.read_rows(spec)
+    except _spec.SpecError as exc:
+        raise ConfigError(f"check_surface: {exc}") from exc
+    rel = spec.relative_to(root)
+    findings: list[str] = []
+    notes: list[str] = []
+    if pkg is None:
+        # The cli column is the one part of a row that needs a package: it names a
+        # `python -m <pkg> ...` command. Every other rule below reads the row alone, so a
+        # repo with no package (`server`, `django`, `unknown`) is still graded on them.
+        notes.append(f"{rel}: cli column: {not_present(root)}")
+    else:
+        findings, notes = _cli_findings(root, rel, rows, pkg)
 
     findings.extend(requires_findings(rows, rel))
     findings.extend(f"{rel}: {f}" for row in rows for f in rail_findings(row))
+    if not any(row.get("rest") or row.get("mcp") or row.get("scope") for row in rows):
+        # Scope is graded only on a row served on REST or MCP. With none, the scope rule
+        # had nothing to read: that is not a pass, and it must not read like one.
+        notes.append(
+            f"{rel}: did not check, nothing to check: no row is served on rest or mcp "
+            "or declares a scope"
+        )
 
     # A row with no `fn` names no callable yet, so there is nothing to resolve: `null` is
     # the value a row has between `lexicon create` and the face that builds it.
     named = [r for r in rows if r.get("fn")]
+    if named and pkg is None:
+        # A row's `fn` is the package's code. With no package, that check does not apply
+        # (a Django-only repo's functions live in its Django app, which cannot be imported
+        # without starting Django), so it says which of the owner's three cases this is.
+        notes.append(
+            f"{rel}: functions of {', '.join(str(r['id']) for r in named)}: "
+            f"{not_present(root)}"
+        )
+        named = []
     resolved = (
         _run(_RESOLVER, json.dumps([str(r["fn"]) for r in named]), root)
         if named
@@ -518,6 +575,19 @@ def audit(root: Path) -> tuple[list[str], int, list[str]]:
     return findings, len(rows), notes
 
 
+def render(findings: list[str], graded: int, notes: list[str]) -> str:
+    """The report for one audit: each note, each finding, then the tally. One home for it.
+
+    The notes come first and are never dropped, so a run that only says what it did not
+    check prints that, never a bare OK.
+    """
+    lines = [f"check_surface: {note}" for note in notes]
+    lines += [f"check_surface: {f}" for f in findings]
+    if graded:
+        lines.append(f"check_surface: {len(findings)} finding(s) over {graded} row(s)")
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse argv, audit the repo, and return the process exit code."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -528,15 +598,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     findings, graded, notes = audit(args.root.resolve())
-    for note in notes:
-        print(f"check_surface: {note}", file=sys.stderr if args.json else sys.stdout)
     if args.json:
+        for note in notes:
+            print(f"check_surface: {note}", file=sys.stderr)
         print(json.dumps({"findings": findings, "rows": graded}, indent=2))
     else:
-        for f in findings:
-            print(f"check_surface: {f}")
-        if graded:
-            print(f"check_surface: {len(findings)} finding(s) over {graded} row(s)")
+        report = render(findings, graded, notes)
+        if report:
+            print(report)
     return 1 if findings else 0
 
 

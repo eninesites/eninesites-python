@@ -16,17 +16,18 @@ from lib.lexicon import _audit
 from lib.lexicon._audit import (
     Node,
 )
+from lib.lexicon._corpora import OWN, Lexicon
 from lib.lexicon._eligible import eligible_nouns, in_selection
 from lib.lexicon._nodes import (
     DEFAULT_DOMAIN,
+    OWN_ONLY,
     _is_command,
     _params_of,
     declared_domains,
     declared_kinds,
     domains_of,
-    kind_of,
+    graded_here,
     ontology_path,
-    pages,
     partition_field,
     root_noun,
     verb_node,
@@ -35,7 +36,7 @@ from lib.shared import _frontmatter
 from lib.shared._root import package_dir, packages
 
 
-def listing(terms: Path, selected: list[str]) -> list[dict[str, Any]]:
+def listing(lexicon: Lexicon, selected: list[str]) -> list[dict[str, Any]]:
     """THE list, as records: `[{domain, noun, verb, node, params}, ...]`.
 
     One rendering of `tuples()`, and the only one. The tuple is
@@ -55,7 +56,7 @@ def listing(terms: Path, selected: list[str]) -> list[dict[str, Any]]:
             "node": str(row.node),
             "params": list(attrs.params),
         }
-        for row, attrs in tuples(terms, selected).items()
+        for row, attrs in tuples(lexicon, selected).items()
     ]
 
 
@@ -122,7 +123,7 @@ class Graph(NamedTuple):
     """
 
     root: Path
-    terms: Path
+    lexicon: Lexicon
     selected: tuple[str, ...]
     pkg: Path | None
     kinds: dict[str, Any]
@@ -130,7 +131,6 @@ class Graph(NamedTuple):
     cli: dict[str, set[str]]
     api: dict[str, frozenset[str]]
     addressable: frozenset[tuple[str, ...]]
-    canon: Path | None
     partitioned: bool
     rows: tuple[Row, ...]
     attrs: dict[Row, Attrs]
@@ -185,13 +185,13 @@ class Answer(NamedTuple):
         return not self.missing
 
 
-def undeclared(domain: str, noun: str, verb: str | None, terms: Path) -> Row:
+def undeclared(domain: str, noun: str, verb: str | None, lexicon: Lexicon) -> Row:
     """The tuple the lexicon WOULD have for a command the surface offers and it does not name.
 
     Its `node` is where that node would go, so the row is complete and feedable rather than a
     description of one. This is the value a reverse half returns and `create --tuple` takes.
     """
-    return Row(domain, noun, verb, verb_node(terms, noun, verb))
+    return Row(domain, noun, verb, verb_node(lexicon, noun, verb))
 
 
 class Word(NamedTuple):
@@ -220,7 +220,9 @@ class Word(NamedTuple):
     fields: dict[str, Any]
 
 
-def _noun_chain(node: Path, terms: Path) -> str | None:
+def _noun_chain(
+    parts: tuple[str, ...], lexicon: Lexicon, origin: str = OWN
+) -> str | None:
     """The dotted noun a node hangs under, or None when no noun does.
 
     Every directory between the node and the corpus root must declare `kind: noun`. One that
@@ -235,18 +237,16 @@ def _noun_chain(node: Path, terms: Path) -> str | None:
     in one listing and no noun in the other, which is two routes disagreeing about one node.
     So None means one thing only: this node is in a kind bucket.
     """
-    parts: list[str] = []
-    directory = node.parent
-    while directory != terms:
-        readme = directory / "README.md"
-        if not readme.is_file() or kind_of(readme, terms) != "noun":
+    for depth in range(len(parts), 0, -1):
+        readme = lexicon.at("/".join((*parts[:depth], "README.md")), origin)
+        if readme is None or readme.kind != "noun":
             return None
-        parts.append(directory.name)
-        directory = directory.parent
-    return ".".join(reversed(parts)) if parts else root_noun(terms)
+    return ".".join(parts) if parts else root_noun(lexicon)
 
 
-def words(terms: Path, selected: list[str], kind: list[str]) -> list[dict[str, Any]]:
+def words(
+    lexicon: Lexicon, selected: list[str], kind: list[str]
+) -> list[dict[str, Any]]:
     """Every node of the named kinds, as records. The corpus by kind, not by command.
 
     READMEs are IN: a noun's node IS its README. `tuples()` carries each noun too, as a row
@@ -258,14 +258,13 @@ def words(terms: Path, selected: list[str], kind: list[str]) -> list[dict[str, A
     by name, the same way it refuses an unknown `--domain`.
     """
     wanted = set(kind)
-    required = declared_kinds(terms)
+    required = declared_kinds(lexicon)
     found: list[Word] = []
-    if not terms.is_dir():
-        return []
-    for node, _ in pages(terms):
-        declares = kind_of(node, terms)
+    for entry in lexicon.nodes(origins=OWN_ONLY):
+        declares = entry.kind
         if not declares or (wanted and declares not in wanted):
             continue
+        node = lexicon.path(entry)
         meta = _frontmatter.load(node)
         spec = required.get(declares) or {}
         keys = spec.get("required") or [] if isinstance(spec, dict) else []
@@ -283,7 +282,7 @@ def words(terms: Path, selected: list[str], kind: list[str]) -> list[dict[str, A
                     domain=domain,
                     kind=declares,
                     name=str(meta.get("name") or node.stem).strip('"'),
-                    noun=_noun_chain(node, terms),
+                    noun=_noun_chain(entry.parts, lexicon),
                     node=node,
                     fields={k: meta[k] for k in keys if k in meta},
                 )
@@ -301,39 +300,41 @@ def words(terms: Path, selected: list[str], kind: list[str]) -> list[dict[str, A
     ]
 
 
-def tuples(terms: Path, selected: list[str]) -> dict[Row, Attrs]:
+def tuples(lexicon: Lexicon, selected: list[str]) -> dict[Row, Attrs]:
     """THE list: every `(domain, noun, verb)` the graph declares, and what hangs off each.
 
     One walk of the corpus, and the only one. Every caller that wants the tuples reads
     this, so no two of them can disagree.
     """
     found: dict[Row, Attrs] = {}
-    if not terms.is_dir():
-        return found
-    root = root_noun(terms)
+    root = root_noun(lexicon)
     # The list starts from the eligible nouns. Every domain is asked for here, because
     # domains are applied per row below; what this leaves out is a reserved noun, and so
     # every verb under it.
-    eligible = eligible_nouns(terms, declared_domains(terms))
-    for node, _ in pages(terms):
-        if kind_of(node, terms) != "verb" or node.name == "README.md":
+    eligible = eligible_nouns(lexicon, declared_domains(lexicon))
+    # The repo's own commands: racecar delivers none, so its delivered copy adds no row.
+    for entry in lexicon.nodes(origins=OWN_ONLY, kind="verb"):
+        if entry.filename == "README.md" or not _is_command(entry, lexicon):
             continue
-        if not _is_command(node, terms):
-            continue
-        chain = node.relative_to(terms).parent.parts
+        node = lexicon.path(entry)
+        chain = entry.parts
         if chain not in eligible:
             continue
         noun = ".".join(chain) if chain else root
         verb = str(_frontmatter.load(node).get("name") or node.stem).strip('"')
         params = tuple(_params_of(node))
+        # The nodes this command uses, as the union resolves them. Every reader of `reaches`
+        # (`footprint`) is a check that GRADES the node, so a node in racecar's domain is left
+        # out: racecar grades its own words where it writes them (`graded_here`).
+        positions = (
+            "/".join((*chain, "README.md")),
+            f"verb/{verb}.md",
+            *(f"param/{flag}.md" for flag in params),
+        )
         reaches = tuple(
-            p
-            for p in (
-                node.parent / "README.md",
-                terms / "verb" / f"{verb}.md",
-                *(terms / "param" / f"{flag}.md" for flag in params),
-            )
-            if p.exists() and p != node
+            path
+            for path in (lexicon.find(position) for position in positions)
+            if path is not None and path != node and graded_here(path, lexicon)
         )
         declared = domains_of(node)
         for domain in declared or [DEFAULT_DOMAIN]:
@@ -347,8 +348,8 @@ def tuples(terms: Path, selected: list[str]) -> dict[Row, Attrs]:
     # Every noun, as its own row with no verb. Placed by `_noun_chain`, the rule `words()`
     # uses, so a README declaring `kind: noun` inside a kind bucket is not a command noun here
     # either.
-    for node in eligible.values():
-        noun_name = _noun_chain(node, terms)
+    for chain, node in eligible.items():
+        noun_name = _noun_chain(chain, lexicon)
         if noun_name is None:
             continue
         declared = domains_of(node)
@@ -392,11 +393,9 @@ def api_surface(root: Path) -> dict[str, frozenset[str]]:
     return out
 
 
-def graph(
-    root: Path, terms: Path, selected: list[str], canon: Path | None = None
-) -> Graph:
+def graph(root: Path, lexicon: Lexicon, selected: list[str]) -> Graph:
     """Read the list and the tree once, into the value every method is graded against."""
-    listed = tuples(terms, selected)
+    listed = tuples(lexicon, selected)
     # Both counts come FROM the list. A word cuts across when more than one tuple uses it,
     # which is a fact about the list.
     verb_users: dict[str, set[str]] = {}
@@ -423,24 +422,26 @@ def graph(
     # so the check that catches it would never run.
     canonical: dict[str, Node] = {}
     local: dict[str, Node] = {}
-    for flag_node in _audit.flag_nodes(root, canon):
+    for flag_node in _audit.flag_nodes(lexicon):
         stem = Path(flag_node.where.split(" ")[0]).stem
-        (canonical if flag_node.canon else local)[stem] = flag_node
+        # The first by precedence wins: `flag_nodes` lists the union in that order.
+        (canonical if flag_node.canon else local).setdefault(stem, flag_node)
     return Graph(
         root=root,
-        terms=terms,
+        lexicon=lexicon,
         selected=tuple(selected),
         pkg=package_dir(root),
-        kinds=declared_kinds(terms),
+        kinds=declared_kinds(lexicon),
         base=tuple(
-            (_frontmatter.load(ontology_path(terms)).get("base") or {}).get("required")
+            (_frontmatter.load(ontology_path(lexicon)).get("base") or {}).get(
+                "required"
+            )
             or []
         ),
         cli=_audit.cli_verbs(root) if _audit.has_cli(root) else {},
         api=api_surface(root),
         addressable=addressable(root),
-        canon=canon,
-        partitioned=partition_field(terms) is not None,
+        partitioned=partition_field(lexicon) is not None,
         rows=tuple(listed),
         attrs=listed,
         verb_users={word: frozenset(who) for word, who in verb_users.items()},
@@ -459,8 +460,8 @@ def word_node(g: Graph, bucket: str, word: str) -> str | None:
     and for `--apply`, which writes the frame for one. A param's node may be in any corpus
     the lexicon joins, the delivered one included; the graph holds every one it found.
     """
-    node = g.terms / bucket / f"{word}.md"
-    if node.exists():
+    node = g.lexicon.find(f"{bucket}/{word}.md")
+    if node is not None:
         return str(node)
     known = (
         (g.flag_canon.get(word) or g.flag_local.get(word))

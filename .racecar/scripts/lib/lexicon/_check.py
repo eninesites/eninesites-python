@@ -15,7 +15,8 @@ from pathlib import Path
 from typing import Any
 
 from lib import not_a_command
-from lib.lexicon._audit import find_canon, has_cli
+from lib.lexicon._audit import has_cli
+from lib.lexicon._corpora import Lexicon, LexiconError
 from lib.lexicon._emit import emit
 from lib.lexicon._graph import graph
 from lib.lexicon._loop import checked, exit_code
@@ -23,7 +24,6 @@ from lib.lexicon._nodes import (
     FINDINGS,
     OK,
     UNMET,
-    LexiconError,
     declared_domains,
     declared_kinds,
     shadowed_kinds,
@@ -34,10 +34,9 @@ from lib.lexicon.renderer import text
 
 def run(
     root: Path,
-    terms: Path,
+    lexicon: Lexicon,
     selected: list[str],
     *,
-    canon: Path | None = None,
     apply: bool = False,
 ) -> dict[str, Any]:
     """The check's record: the document `--json` prints, plus what the text view reads.
@@ -48,7 +47,7 @@ def run(
     corpora declare) and `not_graded` (the halves this run skipped, which OK does not cover).
     Raises `LexiconError` when the check cannot run.
     """
-    if not set(selected) & set(declared_domains(terms)):
+    if not set(selected) & set(declared_domains(lexicon)):
         return {
             "domains": list(selected),
             "rows": [],
@@ -61,14 +60,13 @@ def run(
             "not_graded": [],
         }
     # THE LIST, read once. Everything below either loops it or is handed it.
-    held = find_canon(root, canon)
-    listed = graph(root, terms, selected, held)
+    listed = graph(root, lexicon, selected)
     # The whole check, composed once, so every route runs exactly this.
     result = checked(listed, apply=apply)
     skipped = []
-    if not declared_kinds(terms):
+    if not declared_kinds(lexicon):
         skipped.append("projection (no ontology declared)")
-    if held is None:
+    if not (listed.flag_canon or listed.flag_local):
         skipped.append("params (no canon to hold them to)")
     elif not has_cli(root):
         skipped.append("flags (no package under src/ holds a `__main__.py`)")
@@ -78,7 +76,7 @@ def run(
         "stubbed": list(result.made),
         "shadowed": [
             [kind, str(loser.relative_to(root))]
-            for kind, loser in sorted(shadowed_kinds(terms).items())
+            for kind, loser in sorted(shadowed_kinds(lexicon).items())
         ],
         "not_graded": skipped,
     }
@@ -86,10 +84,9 @@ def run(
 
 def main(
     root: Path,
-    terms: Path,
+    lexicon: Lexicon,
     selected: list[str],
     *,
-    canon: Path | None = None,
     apply: bool = False,
     answers: bool = False,
     strict: bool = False,
@@ -98,7 +95,7 @@ def main(
 ) -> int:
     """Grade the lexicon against itself and against the tree it projects onto."""
     try:
-        record = run(root, terms, selected, canon=canon, apply=apply)
+        record = run(root, lexicon, selected, apply=apply)
     except LexiconError as err:
         print(text.cannot_run(err), file=sys.stderr)
         return UNMET

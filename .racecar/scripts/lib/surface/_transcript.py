@@ -11,7 +11,7 @@ working tree.** Both run under the repo's own interpreter.
 
 **Only the nodes an edit can reach are compared**: those whose static import closure, within
 the package, holds a file that differs between the ref and the working tree, and those whose
-lexicon pages changed. A change to `lib/cli.py` therefore compares every node. A node whose
+lexicon nodes changed. A change to `lib/cli.py` therefore compares every node. A node whose
 closure imports `racecar.lib._dispatch` also runs checker scripts it names only at run time,
 which no import reaches, so any change under a script directory reaches it too: an edit to
 `scripts/check_docs.py` compares `arch check`, the command that loads it.
@@ -52,11 +52,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from lib.shared._python import repo_python
 from lib.shared._root import package_root
 
-from ._check_json import TIMEOUT, _python
+from ._check_json import TIMEOUT
 from ._error import SurfaceError
-from ._form import audit_tree, package_of
+from ._form import _lexicon, audit_tree, package_of
 from ._invocations import Invocation, declared_half, parser_half
 
 _WORKERS = 4
@@ -217,10 +218,11 @@ def closure(src: Path, module: str, package: str, root: Path | None = None) -> s
 def reached(
     root: Path, package: str, modules: list[str], changed: set[str]
 ) -> set[str]:
-    """The node modules an edit can reach: an import closure, a loaded script, or a lexicon
-    page changed."""
+    """The node modules an edit can reach: an import closure, a loaded script, or a node of
+    the repo's own lexicon changed."""
     src = package_root(root)
-    pages = {p for p in changed if p.startswith("docs/lexicon/")}
+    own = _lexicon(root).lexicon_corpora(root).own.relative_to(root).as_posix()
+    nodes = {p[len(own) + 1 :] for p in changed if p.startswith(f"{own}/")}
     scripts = any(p.startswith(SCRIPT_DIRS) for p in changed)
     out: set[str] = set()
     for module in modules:
@@ -230,12 +232,10 @@ def reached(
             continue
         noun = module[len(package) + 1 :] if module != package else ""
         if noun:
-            # A noun's pages sit in its own directory; the root's sit at the top level.
-            hit = any(
-                p.startswith(f"docs/lexicon/{noun.replace('.', '/')}/") for p in pages
-            )
+            # A noun's nodes sit in its own directory; the root's sit at the top level.
+            hit = any(p.startswith(f"{noun.replace('.', '/')}/") for p in nodes)
         else:
-            hit = any(p.count("/") == 2 for p in pages)
+            hit = any("/" not in p for p in nodes)
         if hit:
             out.add(module)
     return out
@@ -361,7 +361,7 @@ def compare(
     """
     package = package_of(root)
     changed = changed_files(root, ref)
-    python = _python(root)
+    python = repo_python(root)
     after_tree = audit_tree(root)
     with worktree(root, ref) as before:
         before_tree = audit_tree(before)

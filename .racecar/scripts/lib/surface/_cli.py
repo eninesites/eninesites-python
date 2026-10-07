@@ -55,13 +55,13 @@ from ._edit import _funcs, _keys, _literal, _tree, add_entry
 from ._error import SurfaceError
 from ._form import (
     TEMPLATE,
-    TERMS,
     Noun,
     _code_text,
     _lexicon,
     _quoted,
     _render_noun,
     _verb_pieces,
+    copy_error_package,
     noun_of,
     noun_state,
     offered,
@@ -72,6 +72,12 @@ from ._invocations import OWED, SEED, kinds, seed
 
 #: What a spec row's `kind` may be (arch-python/SURFACES.md, "The spec").
 KINDS = ("read", "write", "job")
+
+#: The refusal's last line when a canonical file is missing: `upgrade` writes every one.
+UPGRADE_HINT = (
+    "a canonical file is missing; `python3 .racecar/scripts/surface.py upgrade "
+    "--surface cli` writes it"
+)
 
 
 def create(
@@ -97,12 +103,13 @@ def create(
     if kind is not None and kind not in KINDS:
         raise SurfaceError(f"--kind {kind}: a row's kind is one of {', '.join(KINDS)}")
     lexicon = _lexicon(root)
-    terms = root / TERMS
     package = package_of(root)
     result: dict[str, list[str]] = {"declared": [], "notes": [], "refused": []}
     breaks = _gates(root, package, noun)
     if breaks and not _present(root, package, noun, verb):
-        result["refused"] = breaks
+        # The hint is advice, not one more way the code differs, so it is not counted.
+        result["refused"] = [line for line in breaks if line != UPGRADE_HINT]
+        result["notes"] = [line for line in breaks if line == UPGRADE_HINT]
         return result
     n = noun_of(root, package, noun)
     # No `--kind` refusal: `declare` below writes each asked verb's row with `kind` null,
@@ -111,15 +118,12 @@ def create(
     try:
         result["declared"] = list(
             lexicon.declare(
-                terms,
-                noun,
-                verb,
-                params or [],
-                canon=lexicon.find_canon(root),
-                root=root,
+                lexicon.lexicon_corpora(root), noun, verb, params or [], root=root
             )
         )
-        described = lexicon.describe(terms, noun, verb)
+        # Built again after the write, so what is described includes what was declared.
+        corpora = lexicon.lexicon_corpora(root)
+        described = lexicon.describe(corpora, noun, verb)
     except lexicon.LexiconError as err:
         raise SurfaceError(str(err)) from err
     if breaks:
@@ -140,6 +144,7 @@ def create(
         touched += render_tree(
             TEMPLATE / "tests", root / "tests", {"__PKG__": package}, clobber=False
         )
+        touched += copy_error_package(package_root(root) / package)
         result["notes"] += [f"wrote     {path}" for path in touched]
     parts = [noun] if n.is_root else noun.split(".")
     for depth in range(1, len(parts) + 1):
@@ -147,7 +152,7 @@ def create(
             noun_of(root, package, ".".join(parts[:depth])),
             package,
             lexicon=lexicon,
-            terms=terms,
+            corpora=corpora,
             result=result,
             touched=touched,
         )
@@ -191,14 +196,14 @@ def _seed(
     before-and-after comparison, and `check` would report every one of them; the rebuilt
     package would never be clean. A `job` verb gets none, since replaying one is chosen.
     """
-    terms = root / TERMS
+    corpora = lexicon.lexicon_corpora(root)
     owed = {
         verb
         for (row_noun, verb), state in kinds(root, package_of(root)).items()
         if row_noun == noun and state in OWED
     }
     for verb in verbs:
-        node = lexicon.verb_node(terms, noun, verb)
+        node = lexicon.verb_node(corpora, noun, verb)
         if verb in owed and seed(node):
             result["notes"].append(f"seeded    {node}: {SEED}")
 
@@ -207,7 +212,10 @@ def _gates(root: Path, package: str, noun: str) -> list[str]:
     """Why code may not be written, read before anything is: the package, then each noun."""
     state, breaks = package_state(root, package)
     if state == "breaks":
-        return [f"package {package} does not conform: {b}" for b in breaks]
+        lines = [f"package {package} does not conform: {b}" for b in breaks]
+        if any(b.kind == "file-absent" for b in breaks):
+            lines.append(UPGRADE_HINT)
+        return lines
     parts = noun.split(".")
     for depth in range(1, len(parts) + 1):
         above = ".".join(parts[:depth])
@@ -319,12 +327,12 @@ def _build_noun(
     package: str,
     *,
     lexicon: Any,
-    terms: Path,
+    corpora: Any,
     result: dict[str, list[str]],
     touched: list[Path],
 ) -> None:
     """Render the noun if it is fresh, and list it in its parent; the gates ran already."""
-    summary = _code_text(lexicon.describe(terms, n.noun)["summary"])
+    summary = _code_text(lexicon.describe(corpora, n.noun)["summary"])
     if noun_state(n)[0] == "fresh":
         written, _ = _render_noun(n, package, summary)
         touched += written

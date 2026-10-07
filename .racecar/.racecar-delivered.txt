@@ -37,7 +37,6 @@
 .racecar/scripts/check_required_docs.py
 .racecar/scripts/check_runbook.py
 .racecar/scripts/check_surface.py
-.racecar/scripts/check_surface_auth.py
 .racecar/scripts/check_surface_orchestration.py
 .racecar/scripts/check_test_isolation.py
 .racecar/scripts/check_upward_imports.py
@@ -45,6 +44,7 @@
 .racecar/scripts/clean_files.sh
 .racecar/scripts/commit_preflight.sh
 .racecar/scripts/docs_orchestrate.py
+.racecar/scripts/error.json
 .racecar/scripts/gate_orchestrate.py
 .racecar/scripts/gen_cli_launcher.py
 .racecar/scripts/graph.py
@@ -69,6 +69,7 @@
 .racecar/scripts/lib/lexicon/_audit.py
 .racecar/scripts/lib/lexicon/_check.py
 .racecar/scripts/lib/lexicon/_checks.py
+.racecar/scripts/lib/lexicon/_corpora.py
 .racecar/scripts/lib/lexicon/_create.py
 .racecar/scripts/lib/lexicon/_derive.py
 .racecar/scripts/lib/lexicon/_eligible.py
@@ -127,6 +128,7 @@
 .racecar/scripts/lib/shared/_frontmatter.py
 .racecar/scripts/lib/shared/_imports.py
 .racecar/scripts/lib/shared/_markdown.py
+.racecar/scripts/lib/shared/_python.py
 .racecar/scripts/lib/shared/_readme_block.py
 .racecar/scripts/lib/shared/_report.py
 .racecar/scripts/lib/shared/_results.py
@@ -136,6 +138,10 @@
 .racecar/scripts/lib/shared/_switches.py
 .racecar/scripts/lib/shared/_templates.py
 .racecar/scripts/lib/shared/_test_files.py
+.racecar/scripts/lib/shared/error/__init__.py
+.racecar/scripts/lib/shared/error/_copy.py
+.racecar/scripts/lib/shared/error/_packet.py
+.racecar/scripts/lib/shared/error/_schema.py
 .racecar/scripts/lib/surface/__init__.py
 .racecar/scripts/lib/surface/_check.py
 .racecar/scripts/lib/surface/_check_json.py

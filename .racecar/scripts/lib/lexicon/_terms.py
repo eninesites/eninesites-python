@@ -9,19 +9,19 @@ Complexity: O(T*F), T = terms, F = files scanned for a citation of one
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from check_docs import ignore_patterns
+from lib.lexicon._corpora import Lexicon
 from lib.lexicon._nodes import (
     CODE_SUFFIXES,
     DOC_SUFFIXES,
-    TERM_TREES,
     NomenclatureError,
     _is_command,
-    pages,
 )
 from lib.shared import _frontmatter
 from lib.shared._files import repo_files
@@ -102,8 +102,10 @@ def raw_kind(path: pathlib.Path) -> str:
     return ""
 
 
-def read_terms(root: Path) -> list[Term]:
-    """Every term node in either tree, as declared. Empty when the repo has no trees.
+def read_terms(lexicon: Lexicon) -> list[Term]:
+    """Every term node of the union, as declared. Empty when the lexicon has none.
+
+    The UNION: a word racecar delivers, or retires, binds the repo that receives it.
 
     A node that declares `status:` must also declare `instead:`, and vice versa: a
     retirement with no replacement tells a reader what to stop writing and not what to
@@ -111,64 +113,61 @@ def read_terms(root: Path) -> list[Term]:
     errors rather than skipped nodes, for the reason this whole file exists.
     """
     terms: list[Term] = []
-    for tree in TERM_TREES:
-        directory = root / tree
-        if not directory.is_dir():
+    for entry in lexicon.nodes():
+        path = lexicon.path(entry)
+        # NOT a blanket README skip. A noun's README can be the only node that
+        # defines a word -- `host`, `config`. An index or a schema carries
+        # no word.
+        if raw_kind(path) in {"index", "schema"}:
             continue
-        for path, _ in pages(directory):
-            # NOT a blanket README skip. A noun's README can be the only node that
-            # defines a word -- `host`, `config`. An index or a schema carries
-            # no word.
-            if raw_kind(path) in {"index", "schema"}:
-                continue
-            if path.name == "README.md" and not raw_kind(path):
-                continue
-            # The nounspace shares this directory with the word trees and is told apart
-            # by `kind:`, which is what the ontology is for. A `command` carries
-            # `command:` and no `name:` -- what a verb MEANS is the word node's business
-            # and lives once, while the command's usage is per-noun.
-            head = raw_kind(path)
-            # A COMMAND node is excluded: `graph/check.md` is an address, and what `check`
-            # MEANS lives once at `verb/check.md`. A noun node is NOT excluded:
-            # `host/README.md` is the only node that defines `host`, so skipping nouns
-            # would leave the word with no node while every gate stays green.
-            if head == "verb" and _is_command(path, directory):
-                continue
-            where = str(path.relative_to(root))
-            try:
-                raw = path.read_text(encoding="utf-8")
-            except UnicodeDecodeError as exc:
-                raise NomenclatureError(f"{where}: not valid UTF-8 ({exc})") from exc
-            meta = _frontmatter.load(raw)
-            name = meta.get("name")
-            if not name:
-                raise NomenclatureError(f"{where}: term node declares no `name`")
-            # YAML reads bare `yes`, `no`, `on` and `off` as BOOLEANS. `name: yes` therefore
-            # silently becomes `True`, the retirement of `--yes` matches nothing, and
-            # the gate reports OK. Quote it, and say so.
-            if not isinstance(name, str):
-                raise NomenclatureError(
-                    f"{where}: `name: {name}` parsed as {type(name).__name__}, not a string — "
-                    "YAML reads bare yes/no/on/off as booleans. Quote it."
-                )
-            status, instead = meta.get("status", ""), meta.get("instead", "")
-            if status and status not in STATUSES:
-                raise NomenclatureError(
-                    f"{where}: status {status!r} is not one of {STATUSES}. Absence "
-                    "means canon; only an exception is declared."
-                )
-            if instead_disagrees(status, instead):
-                raise NomenclatureError(
-                    f"{where}: a retirement names its replacement and a replacement needs a "
-                    f"status (status={status!r}, instead={instead!r}). A retirement with no "
-                    "replacement says what to stop writing but not what to write; a "
-                    "replacement with no status is a rule that never fires."
-                )
-            # A flag's WORD carries its dashes: `--yes` is retired, the English word "yes"
-            # is not. Keyed on the node's declared kind, never on which directory it sits
-            # in.
-            word = f"--{name}" if head == "param" else name
-            terms.append(Term(word, where, status, instead))
+        if path.name == "README.md" and not raw_kind(path):
+            continue
+        # The nounspace shares this directory with the word trees and is told apart
+        # by `kind:`, which is what the ontology is for. A `command` carries
+        # `command:` and no `name:` -- what a verb MEANS is the word node's business
+        # and lives once, while the command's usage is per-noun.
+        head = raw_kind(path)
+        # A COMMAND node is excluded: `graph/check.md` is an address, and what `check`
+        # MEANS lives once at `verb/check.md`. A noun node is NOT excluded:
+        # `host/README.md` is the only node that defines `host`, so skipping nouns
+        # would leave the word with no node while every gate stays green.
+        if head == "verb" and _is_command(entry, lexicon):
+            continue
+        where = f"{entry.directory}/{entry.filename}"
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise NomenclatureError(f"{where}: not valid UTF-8 ({exc})") from exc
+        meta = _frontmatter.load(raw)
+        name = meta.get("name")
+        if not name:
+            raise NomenclatureError(f"{where}: term node declares no `name`")
+        # YAML reads bare `yes`, `no`, `on` and `off` as BOOLEANS. `name: yes` therefore
+        # silently becomes `True`, the retirement of `--yes` matches nothing, and
+        # the gate reports OK. Quote it, and say so.
+        if not isinstance(name, str):
+            raise NomenclatureError(
+                f"{where}: `name: {name}` parsed as {type(name).__name__}, not a string — "
+                "YAML reads bare yes/no/on/off as booleans. Quote it."
+            )
+        status, instead = meta.get("status", ""), meta.get("instead", "")
+        if status and status not in STATUSES:
+            raise NomenclatureError(
+                f"{where}: status {status!r} is not one of {STATUSES}. Absence "
+                "means canon; only an exception is declared."
+            )
+        if instead_disagrees(status, instead):
+            raise NomenclatureError(
+                f"{where}: a retirement names its replacement and a replacement needs a "
+                f"status (status={status!r}, instead={instead!r}). A retirement with no "
+                "replacement says what to stop writing but not what to write; a "
+                "replacement with no status is a rule that never fires."
+            )
+        # A flag's WORD carries its dashes: `--yes` is retired, the English word "yes"
+        # is not. Keyed on the node's declared kind, never on which directory it sits
+        # in.
+        word = f"--{name}" if head == "param" else name
+        terms.append(Term(word, where, status, instead))
     return terms
 
 
@@ -317,17 +316,27 @@ def _docs(directory: Path, root: Path) -> list[Path]:
     return _files(directory, root, DOC_SUFFIXES)
 
 
-def _exempt(relative: Path) -> bool:
-    """Whether a document may name a retired word: it declares one, or it records one."""
+def _homes(lexicon: Lexicon) -> tuple[Path, ...]:
+    """The lexicon's homes, relative to its repo: the documents that declare words."""
+    root = lexicon.root.resolve()
+    return tuple(
+        Path(os.path.relpath(home.path.resolve(), root)) for home in lexicon.homes
+    )
+
+
+def _exempt(relative: Path, homes: tuple[Path, ...]) -> bool:
+    """Whether a document may name a retired word: it declares one (it sits in a home of the
+    lexicon), or it records one."""
     return relative in CITING_DOCS or any(
-        tree == relative or tree in relative.parents for tree in TERM_TREES
+        home == relative or home in relative.parents for home in homes
     )
 
 
 def scan(
-    root: Path, terms: list[Term], retired: dict[str, str]
+    lexicon: Lexicon, terms: list[Term], retired: dict[str, str]
 ) -> tuple[dict[str, dict[str, list[str]]], list[Retired]]:
     """Return `(skill -> {consumes, governs}, found)`. Reverse indexes derive later."""
+    root = lexicon.root
     compiled = [(t.word, _needle(t.word), _pattern(t.word)) for t in terms]
     condemned = [(w, _needle(w), _pattern(w)) for w in retired]
     used: dict[str, dict[str, list[str]]] = {}
@@ -371,7 +380,7 @@ def scan(
         for doc in _docs(directory, root):
             text, low = read(doc)
             consumes |= present(compiled, text, low, consumes)
-            if _exempt(doc.relative_to(root)):
+            if _exempt(doc.relative_to(root), _homes(lexicon)):
                 continue
             # Only a term the whole document names can be on one of its lines, so the
             # per-line walk runs for the retired words that are actually here -- which is

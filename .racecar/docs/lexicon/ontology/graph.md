@@ -56,7 +56,7 @@ put a build order on a relationship that has none.
 
 (No link here on purpose. This node is DELIVERED, and a relative link out of it has to
 resolve at both ends of the delivery -- from `docs/rc_lexicon/ontology/` here and from
-`.racecar/docs/lexicon/ontology/` in an adopter. The param pages are racecar's own and do
+`.racecar/docs/lexicon/ontology/` in an adopter. The param nodes are racecar's own and do
 not travel, so naming one would be a dead link in every repo that received this.) Backward-pointing, like every other edge in a racecar graph: a node says what
 it is checked against, never what checks it.
 

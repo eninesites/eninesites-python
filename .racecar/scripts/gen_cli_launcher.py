@@ -40,7 +40,7 @@ that clone lives, on whoever's machine — and needs no racecar checkout to run,
 to (re)generate when the CLI tree changes. The package's own ``__main__.py`` +
 argparse tree is the one source of truth for every verb and flag; this generates no
 structure of its own, exactly as ``lexicon.py`` projects that same tree into
-pages rather than inventing one.
+nodes rather than inventing one.
 
 **Why re-exec into the venv rather than importing its packages.** A venv's own
 ``bin/python`` is itself a symlink to a base interpreter, and CPython only honours a
@@ -72,6 +72,7 @@ import stat
 import sys
 from pathlib import Path
 
+from lib.lexicon._corpora import Lexicon, lexicon_corpora
 from lib.lexicon._nodes import declared_nouns, declared_verbs
 from lib.shared._root import find_repo_root
 
@@ -226,7 +227,7 @@ runpy.run_module(_module, run_name="__main__", alter_sys=True)
 REGENERATE = "python scripts/gen_cli_launcher.py --write"
 
 
-def noun_table(terms: Path) -> tuple[dict[str, tuple[str, ...]], tuple[str, ...]]:
+def noun_table(lexicon: Lexicon) -> tuple[dict[str, tuple[str, ...]], tuple[str, ...]]:
     """`({noun: (sub-noun, ...)}, root verbs)` read from the DECLARATION, not from the code.
 
     The nounspace is the authority on what a noun is, so the launcher's dispatch table comes
@@ -239,10 +240,8 @@ def noun_table(terms: Path) -> tuple[dict[str, tuple[str, ...]], tuple[str, ...]
     """
     nouns: dict[str, tuple[str, ...]] = {}
     root_verbs: tuple[str, ...] = ()
-    if not terms.is_dir():
-        return nouns, root_verbs
-    for chain in sorted(declared_nouns(terms)):
-        verbs = tuple(sorted(declared_verbs(terms, chain)))
+    for chain in sorted(declared_nouns(lexicon)):
+        verbs = tuple(sorted(declared_verbs(lexicon, chain)))
         if not chain:
             root_verbs = verbs
         elif len(chain) == 1:
@@ -252,7 +251,7 @@ def noun_table(terms: Path) -> tuple[dict[str, tuple[str, ...]], tuple[str, ...]
     return nouns, root_verbs
 
 
-def render(pkg: str, terms: Path | None = None) -> str:
+def render(pkg: str, lexicon: Lexicon | None = None) -> str:
     """The launcher's full text: the package name and its declared noun table.
 
     Still no machine-specific anything -- the table is derived from committed declarations, so
@@ -260,7 +259,7 @@ def render(pkg: str, terms: Path | None = None) -> str:
     safe to commit.
     """
     nouns, root_verbs = noun_table(
-        terms if terms is not None else REPO_ROOT / "docs" / "lexicon"
+        lexicon if lexicon is not None else lexicon_corpora(REPO_ROOT)
     )
     return _LAUNCHER_TEMPLATE.format(
         regenerate=REGENERATE, pkg=pkg, nouns=nouns, root_verbs=root_verbs

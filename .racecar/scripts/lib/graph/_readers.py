@@ -24,7 +24,7 @@ from typing import Any
 from check_doc_graph import graph_edges, in_scope
 from lib.graph._declared import declarations, reader_problem, resolve
 from lib.lexicon._audit import cli_tree
-from lib.lexicon._nodes import LexiconError
+from lib.lexicon._corpora import LexiconError, lexicon_corpora
 from lib.shared._files import repo_files
 from lib.shared._imports import closure, import_edges
 from lib.shared._root import package_dir, package_root
@@ -139,8 +139,9 @@ def read_pnode(root: Path, data: dict[str, Any]) -> Read | None:
     manifest.
 
     `source:` is what selects the corpus, which is what the delivered kind already says it
-    is: "where the graph is read from: a path, or a glob". A directory means every `*.md`
-    beneath it; anything else is a glob against the repo. So declaring a new containment
+    is: "where the graph is read from: a path, or a glob". The repo's lexicon home means the
+    lexicon, the union of every home (`lexicon_corpora`); any other directory means every
+    `*.md` beneath it; anything else is a glob against the repo. So declaring a new containment
     graph is a node and no code.
 
     `in_scope` is applied either way -- it is `check_doc_graph`'s own predicate for "a doc
@@ -150,7 +151,12 @@ def read_pnode(root: Path, data: dict[str, Any]) -> Read | None:
     source, _ = _source(data)
     if not source:
         return None
-    if (root / source).is_dir():
+    corpora = lexicon_corpora(root)
+    if (root / source).resolve() == corpora.own.resolve():
+        # The source is the repo's lexicon, and the lexicon is the union of its homes,
+        # never one folder of it.
+        found = [corpora.path(entry) for entry in corpora.nodes()]
+    elif (root / source).is_dir():
         found = sorted((root / source).rglob("*.md"))
     else:
         found = [p for p in repo_files(root, "*.md") if p.match(source)]

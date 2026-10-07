@@ -56,8 +56,8 @@ from pathlib import Path
 from typing import Callable, NamedTuple
 
 import check_commit_message
-from lib.shared import _commits, _frontmatter
-from lib.shared._constants import RELEASE_RE
+from lib.shared import _commits, _frontmatter, _markdown
+from lib.shared._constants import RELEASE_RE, RELEASE_TITLE_RE, UNRELEASED_TITLE
 
 
 class RenumberError(Exception):
@@ -100,8 +100,22 @@ def rewrite_changelog(text: str, old: str, new: str) -> str:
     that number in some other section, and rewriting them is corruption dressed as
     consistency.
     """
-    pattern = re.compile(rf"^## {re.escape(old)} - (\d{{4}}-\d{{2}}-\d{{2}})", re.M)
-    return pattern.sub(rf"## {new} - \1", text, count=1)
+    lines = text.splitlines(keepends=True)
+    for heading, version, date in _releases(text):
+        if version == old:
+            ending = lines[heading.no - 1][len(lines[heading.no - 1].rstrip("\r\n")) :]
+            lines[heading.no - 1] = f"## {new} - {date}{ending}"
+            break
+    return "".join(lines)
+
+
+def _releases(text: str) -> list[tuple[_markdown.Heading, str, str]]:
+    """`(heading, version, date)` for each `## X.Y.Z - DATE` heading, in file order."""
+    return [
+        (heading, match.group(1), match.group(2))
+        for heading in _markdown.parse(text).headings(2)
+        if (match := RELEASE_TITLE_RE.fullmatch(heading.title))
+    ]
 
 
 def rewrite_brief_stamp(text: str, old: str, new: str) -> str:
@@ -282,8 +296,9 @@ def assert_target_is_free(root: Path, new: str) -> None:
     changelog = root / "CHANGELOG.md"
     if not changelog.is_file():
         return
-    if re.search(
-        rf"^## {re.escape(new)} - ", changelog.read_text(encoding="utf-8"), re.M
+    if any(
+        version == new
+        for _, version, _ in _releases(changelog.read_text(encoding="utf-8"))
     ):
         raise RenumberError(
             f"CHANGELOG.md already has a `## {new}` section. Renumbering onto it would "
@@ -305,7 +320,7 @@ def assert_target_is_free(root: Path, new: str) -> None:
 # Simpler than a renumber because there is no stale number to find and no "was a bump
 # silently discarded?" to detect. Nothing predicted, so nothing can be wrong.
 
-UNRELEASED = "## [Unreleased]"
+UNRELEASED = f"## {UNRELEASED_TITLE}"
 
 
 def next_version(current: str, commit_type: str, breaking: bool) -> str:
@@ -326,24 +341,29 @@ def next_version(current: str, commit_type: str, breaking: bool) -> str:
     return new
 
 
-# The heading, anchored to its own line. A bare substring test matches the five times this
-# file's own prose says `## [Unreleased]` while explaining the rule, and `str.replace` then
-# promotes at the first of those -- splicing a released heading into the middle of an old
-# entry's sentence and stranding its tail at column 0.
-_UNRELEASED_LINE = re.compile(rf"^{re.escape(UNRELEASED)}[ \t]*$", re.M)
-_SECTION_LINE = re.compile(r"^## ", re.M)
+def _unreleased(text: str) -> _markdown.Section:
+    """The `## [Unreleased]` section, as the markdown reader finds the heading.
 
-
-def unreleased_body(text: str) -> str:
-    """What sits under the `## [Unreleased]` heading, up to the next `## ` heading."""
-    match = _UNRELEASED_LINE.search(text)
-    if match is None:
+    The heading, not the string. A substring test matches the five times this file's own
+    prose says `## [Unreleased]` while explaining the rule, and `str.replace` then promotes
+    at the first of those -- splicing a released heading into the middle of an old entry's
+    sentence and stranding its tail at column 0. The reader reads headings on text lines
+    only, so a quoted one, or one inside a code block, is not it.
+    """
+    section = _markdown.parse(text).section(UNRELEASED_TITLE)
+    if section is None:
         raise RenumberError(
             f"no '{UNRELEASED}' heading to promote. A branch under the trunk-only version "
             f"rule records its entry there; without one there is nothing to assign."
         )
-    following = _SECTION_LINE.search(text, match.end())
-    return text[match.end() : following.start() if following else len(text)]
+    return section
+
+
+def unreleased_body(text: str) -> str:
+    """What sits under the `## [Unreleased]` heading, up to the next `## ` heading."""
+    section = _unreleased(text)
+    lines = text.splitlines(keepends=True)
+    return "".join(lines[section.start : section.end - 1])
 
 
 def has_entry(body: str) -> bool:
@@ -353,8 +373,9 @@ def has_entry(body: str) -> bool:
     not how it was punctuated. A `### ` sub-heading does not -- it is structure, and a
     release whose notes are a heading with nothing under it describes nothing.
     """
+    doc = _markdown.parse(body, frontmatter=False)
     return any(
-        line.strip() and not line.lstrip().startswith("#") for line in body.splitlines()
+        line.text.strip() and doc.heading_at(line.no) is None for line in doc.body()
     )
 
 
@@ -377,9 +398,10 @@ def promote_unreleased(text: str, new: str, date: str) -> str:
             f"section describes its commit's change and is written in that commit "
             f"(COMMITS.md 'One changelog section per bump'). Write the entry, then assign."
         )
-    match = _UNRELEASED_LINE.search(text)
-    assert match is not None  # unreleased_body raised otherwise
-    return f"{text[: match.end()]}\n\n## {new} - {date}{text[match.end() :]}"
+    lines = text.splitlines(keepends=True)
+    at = _unreleased(text).start  # the line after the heading, counting from 0
+    head = "".join(lines[:at]).rstrip("\r\n")
+    return f"{head}\n\n## {new} - {date}\n{''.join(lines[at:])}"
 
 
 def _today() -> str:

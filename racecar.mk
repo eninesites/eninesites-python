@@ -85,26 +85,28 @@ else
   LIB_PYPROJECT ?= pyproject.toml
 endif
 
-# PKG: the importable package directory the audits require — check_cli_commands
-# resolves a package dir (e.g. src/<pkg> -> the `<pkg>` package), NOT the namespace
-# source root (`src` has no __init__.py and is rejected), and coverage attributes to
-# the package. Auto-derived from SRC so no per-repo override is needed: SRC itself
-# when SRC is the whole tree (`.`) or is itself a package (has __init__.py); otherwise
-# the package directory found under SRC. Under `src`, the package root, that is the
-# rule `package_dir` (lib/shared/_root.py) applies: the one package, or with several the
-# one `[project].name` names (`-` and `.` read as `_`), else SRC itself, so a choice the
-# repo did not make is never made for it. Elsewhere (`server/`) the first package, else
-# SRC. Override with `PKG := ...` before the include.
+# PKG: the repo's package, the subject of every package check (check_upward_imports,
+# check_deferred_imports, check_cli_commands, coverage). The same answer `package_dir`
+# (lib/shared/_root.py) gives in Python, decided again here because the build must work
+# with nothing but `make`; a test holds the two in step. In the flat shapes SRC is the
+# package; under `src`, the one package, or with several the one
+# `[project].name` names (`-` and `.` read as `_`). Otherwise EMPTY: a Django-only repo
+# (`server`, `django`) and a repo with several packages and none named have no package,
+# and a package check there says so rather than guessing one. Override with
+# `PKG := ...` before the include.
 _SRC_PKGS := $(patsubst %/,%,$(dir $(wildcard $(SRC)/*/__init__.py)))
-ifeq ($(SRC),.)
-  PKG ?= .
-else ifneq ($(wildcard $(SRC)/__init__.py),)
+ifneq ($(filter flat flat+server,$(SHAPE)),)
   PKG ?= $(SRC)
 else ifeq ($(SRC),src)
-  PKG ?= $(if $(filter 1,$(words $(_SRC_PKGS))),$(_SRC_PKGS),$(or $(filter src/$(_PROJECT_MODULE),$(_SRC_PKGS)),$(SRC)))
+  PKG ?= $(if $(filter 1,$(words $(_SRC_PKGS))),$(_SRC_PKGS),$(filter src/$(_PROJECT_MODULE),$(_SRC_PKGS)))
 else
-  PKG ?= $(firstword $(_SRC_PKGS) $(SRC))
+  PKG ?=
 endif
+# Why a check does not apply, in the owner's three cases, worded as `not_present` words
+# them (lib/shared/_root.py): a package and no Django server, a Django server and no
+# package, or neither.
+_HAS_DJANGO := $(filter src+server flat+server server django,$(SHAPE))
+_NOT_PRESENT = $(if $(PKG),No django server to check,$(if $(_HAS_DJANGO),No package to check,Nothing to check))
 
 # Shared defaults (no-op when a block above already set them).
 SERVER ?=
@@ -844,7 +846,7 @@ test-fast: ## pytest minus the slow and macro tiers, serial — the pre-commit c
 
 coverage: ## pytest with branch coverage; HTML report at htmlcov/index.html
 	$(PYTHON) -m pytest -c $(LIB_PYPROJECT) \
-	  --cov=$(PKG) --cov-branch \
+	  --cov=$(or $(PKG),$(SRC)) --cov-branch \
 	  --cov-report=term-missing --cov-report=html
 endif
 
@@ -926,18 +928,21 @@ _arch:
 	  status=$$?; \
 	  if [ $$status -ne 0 ]; then printf '%s\n' "$$out"; exit $$status; fi; \
 	  printf '%s\n' "$$out" | grep -E "^Contracts:" || echo "import-linter: OK"
-	@$(PYTHON) $(call racecar_script,check_upward_imports.py) $$(find $(PKG) $(SERVER) -name '*.py' -not -path '*/.*' -not -path '*/venv/*')
-	@mains=$$(find $(PKG) $(SERVER) -name '__main__.py' -not -path '*/.*' -not -path '*/venv/*' 2>/dev/null); \
+	@if [ -n "$(PKG)" ]; then \
+	  $(PYTHON) $(call racecar_script,check_upward_imports.py) $$(find $(PKG) $(SERVER) -name '*.py' -not -path '*/.*' -not -path '*/venv/*'); \
+	else \
+	  echo "arch: skipping check_upward_imports ($(_NOT_PRESENT))"; \
+	fi
+	@mains=$$([ -n "$(PKG)" ] && find $(PKG) $(SERVER) -name '__main__.py' -not -path '*/.*' -not -path '*/venv/*' 2>/dev/null); \
 	if [ -n "$$mains" ]; then \
 	  $(PYTHON) $(call racecar_script,check_deferred_imports.py) $$mains \
 	    && echo "check_deferred_imports: OK"; \
 	fi
-	@main=$$(find $(PKG) -name '__main__.py' -not -path '*/.*' -not -path '*/venv/*' -print -quit 2>/dev/null); \
-	if [ -z "$$main" ]; then \
+	@main=$$([ -n "$(PKG)" ] && find $(PKG) -name '__main__.py' -not -path '*/.*' -not -path '*/venv/*' -print -quit 2>/dev/null); \
+	if [ -z "$(PKG)" ]; then \
+	  echo "arch: skipping check_cli_commands ($(_NOT_PRESENT))"; \
+	elif [ -z "$$main" ]; then \
 	  echo "arch: skipping check_cli_commands ($(PKG) has no __main__.py — no CLI surface)"; \
-	elif [ "$(PKG)" = "." ]; then \
-	  echo "arch: flat shape — auditing the CLI package $$(dirname "$$main")"; \
-	  $(PYTHON) $(call racecar_script,check_cli_commands.py) "$$(dirname "$$main")"; \
 	else \
 	  out=$$($(PYTHON) $(call racecar_script,check_cli_commands.py) $(PKG) 2>&1); \
 	  status=$$?; \
@@ -948,8 +953,9 @@ _arch:
 # The pair. check_cli_commands above grades the HOW -- every node has __main__.py +
 # commands(), the listing matches, nothing runs at import. check_surface grades the WHAT:
 # the verbs that exist are the verbs the spec declared, in both directions. A tree can
-# satisfy every structural rule in §3 and still offer a verb nobody designed. No-ops in a
-# repo with no surface.jsonl, which is most of them.
+# satisfy every structural rule in §3 and still offer a verb nobody designed. It also grades
+# every row the spec serves on REST or MCP for its scope, in every shape. No-ops in a repo
+# with no surface.jsonl, which is most of them.
 	@$(PYTHON) $(call racecar_script,check_surface.py)
 	@$(PYTHON) $(call racecar_script,check_surface_orchestration.py)
 	@$(PYTHON) $(call racecar_script,check_test_isolation.py)
@@ -959,19 +965,6 @@ _arch:
 # declared verb is reachable from that vertical's api. No-ops in a repo with no declared
 # term ontology, which is most of them.
 	@$(PYTHON) $(call racecar_script,lexicon.py) check --all
-# check_surface_auth is delivered only where a generated auth surface can exist at all
-# (racecar-secure-server writes into $(SERVER)); `#55` filed this as a checker that was
-# fully built and tested but never wired into any `make` target, so the "already gates
-# this" AUTH.md/SURFACES.md/secure-server docs described was not connected to anything
-# an adopter's `make check` actually ran. Guarded on $(SERVER) being set, the same shape
-# as the Django guard below -- the checker itself no-ops gracefully with no server/, but
-# a repo with no server has nothing for this to grade, and the guard says so rather than
-# spending a subprocess on a question `$(SERVER)` already answered.
-ifneq ($(SERVER),)
-	@$(PYTHON) $(call racecar_script,check_surface_auth.py)
-else
-	@echo "arch: skipping check_surface_auth (no server surface — SERVER is unset)"
-endif
 # Make-level, not a shell `if`: the Django checker is delivered only to a repo that has a
 # manage.py (sync_scripts.DJANGO_SCRIPTS), so in every other repo the name resolves nowhere
 # — and `racecar_script` resolves before any shell runs. `ifneq` drops the untaken branch
@@ -981,13 +974,13 @@ ifneq ($(_DJANGO_MNG),)
 else
 	@echo "arch: skipping check_dj_model_ref_as_string (no manage.py found — not a Django project)"
 endif
-	@$(MAKE) --no-print-directory check-overrides
 
 # Assert this repo has not overridden racecar: no [tool.racecar] table in pyproject and
 # a racecar.mk byte-identical to canon (fix racecar, do not override it — see
-# upgrade/README.md). Racecar-run-only: the check diffs against the racecar checkout's
-# templates/classic/, resolved via RACECAR_ROOT (the installed skill symlink). No-ops
-# gracefully when RACECAR_ROOT is unset.
+# upgrade/README.md). It needs an installed racecar to compare against, so it is part of
+# the explicit upgrade (`racecar upgrade` runs it) and of no check: a clone must give the
+# same answer on a machine with racecar and on one without. Run it by hand here, or through
+# `make racecar-upgrade`.
 check-overrides: ## Assert the repo has not overridden racecar (pyproject + racecar.mk)
 	@if [ -n "$(RACECAR_ROOT)" ]; then \
 	  PYTHONPATH="$(RACECAR_ROOT)/src" $(PYTHON) -m racecar.root.lib.upgrade._overrides --root .; \
@@ -1053,55 +1046,36 @@ check-overrides: ## Assert the repo has not overridden racecar (pyproject + race
 #
 # The last step is the generated projections, CHECKED rather than merely generatable. A
 # projection with no gate goes stale silently, and this repo proved it: the CLI-docs
-# generator's `--check` shipped and was wired into nothing for months, so a page quoting a
+# generator's `--check` shipped and was wired into nothing for months, so a node quoting a
 # finding the code had stopped emitting passed `make check-full` clean. `cli-docs/SKILL.md`
 # had said to wire it into CI the whole time -- the instruction existed and nothing enforced
 # it, which is the shape R-02 is about.
 #
 # What is generated now is one block, the README's `## CLI`, rendered by the CLI audit, and
 # `racecar.surface generate --surface cli --docs --strict` fails when the tree left it STALE.
-# The lexicon writes lexicon entries and no page body: every lexicon page is authored.
-# The step runs `racecar.surface`, so an interpreter that cannot import it skips the step with
-# a printed reason, the way the lexicon check above skips with no canon to read. The same
-# verb is delivered as `surface.py`; this recipe does not call it yet.
+# The lexicon writes lexicon entries and no node body: every lexicon node is authored.
+# The step runs the delivered `surface.py`, the same verb `racecar.surface` wraps, so it runs
+# in every clone whether or not racecar is installed.
 #
-# Doc drift runs last and never records a DIFFERENCE as a failure: it reports how each
-# declared doc differs from its template (a missing template heading, a section still holding
-# the placeholder, the headings out of order), and a heading difference has legitimate
-# instances. It reads racecar's templates, so like check-overrides it runs only with
-# RACECAR_ROOT set. Its contract is exit 0 always, so a non-zero exit means it did not run --
-# most often RACECAR_ROOT naming a racecar checkout whose `src/` predates the module, which
-# is what the default (the installed skill symlink) names when racecar is worked on from any
-# other checkout or worktree. That is recorded as a failure, never printed and passed over.
+# Every step here reads only the clone: the repo's own files and what racecar delivered into
+# `.racecar/`, never an installed racecar. A repo pushed by someone with racecar and cloned by
+# someone without it must give the same answer. So the lexicon grades the corpus
+# `.racecar/docs/lexicon` + `docs/lexicon` (a clean no-op when neither exists), and doc drift,
+# which compares against racecar's templates, belongs to `racecar upgrade`, not here.
 docs: ## doc-coherence pre-pass (links / §N / vocab) + doc graph + placement + changelog + brief
 	@fail=''; \
 	$(PYTHON) $(call racecar_script,check_docs.py) || fail="$$fail check_docs"; \
 	$(PYTHON) $(call racecar_script,check_doc_graph.py) || fail="$$fail check_doc_graph"; \
 	$(PYTHON) $(call racecar_script,check_file_placement.py) || fail="$$fail check_file_placement"; \
 	$(PYTHON) $(call racecar_script,check_required_docs.py) || fail="$$fail check_required_docs"; \
-	if [ -n "$(RACECAR_ROOT)" ] || [ -d docs/lexicon/param ]; then \
-	  RACECAR_ROOT="$(RACECAR_ROOT)" $(PYTHON) $(call racecar_script,lexicon.py) check --all || fail="$$fail lexicon"; \
-	else \
-	  echo "docs: skipping lexicon check (no racecar checkout in RACECAR_ROOT or $(HOME)/.claude/skills/racecar, and no local docs/lexicon/param/)"; \
-	fi; \
+	$(PYTHON) $(call racecar_script,lexicon.py) check --all || fail="$$fail lexicon"; \
 	$(PYTHON) $(call racecar_script,check_changelog.py) || fail="$$fail check_changelog"; \
 	if ls docs/summary/*.md >/dev/null 2>&1; then \
 	  $(PYTHON) $(call racecar_script,check_brief.py) || fail="$$fail check_brief"; \
 	else \
 	  echo "docs: skipping check_brief (no docs/summary/ brief)"; \
 	fi; \
-	if $(PYTHON) -c "import racecar.surface" 2>/dev/null; then \
-	  $(PYTHON) -m racecar.surface generate --surface cli --docs --strict || fail="$$fail surface-generate"; \
-	else \
-	  echo "docs: skipping surface generate --docs (racecar is not installed for $(PYTHON))"; \
-	fi; \
-	if [ -n "$(RACECAR_ROOT)" ]; then \
-	  PYTHONPATH="$(RACECAR_ROOT)/src" $(PYTHON) -m racecar.root.lib.upgrade._doc_drift --root . || { \
-	    echo "docs: doc drift did not run from RACECAR_ROOT=$(RACECAR_ROOT) (a stale or different racecar checkout? pass RACECAR_ROOT=/path/to/racecar)" >&2; \
-	    fail="$$fail doc-drift"; }; \
-	else \
-	  echo "docs: skipping doc drift (RACECAR_ROOT unset; the templates are racecar's)"; \
-	fi; \
+	$(PYTHON) $(call racecar_script,surface.py) generate --surface cli --docs --strict || fail="$$fail surface-generate"; \
 	if [ -n "$$fail" ]; then \
 	  echo "docs: finding(s) reported by:$$fail"; \
 	  exit 1; \

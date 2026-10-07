@@ -206,11 +206,8 @@ def _heading_slugs(text: str) -> set[str]:
     """
     slugs: set[str] = set()
     seen: dict[str, int] = {}
-    for _, line in _markdown.prose(text.splitlines()):
-        m = re.match(r"^#+\s+(.+?)\s*$", line)
-        if not m:
-            continue
-        h = m.group(1).lower()
+    for heading in _markdown.parse(text).headings():
+        h = heading.title.lower()
         h = re.sub(r"[`'\"]", "", h)
         h = re.sub(r"[^\w\s-]", "", h)
         base = re.sub(r"\s+", "-", h).strip("-")
@@ -224,33 +221,26 @@ def _section_numbers(text: str) -> set[str]:
     """Return the top-level section numbers (e.g. {'1','2'} from '## 1. Foo')."""
     return {
         m.group(1)
-        for line in text.splitlines()
-        if (m := re.match(r"^##\s+(\d+)\.", line))
+        for heading in _markdown.parse(text).headings(2)
+        if (m := re.match(r"(\d+)\.", heading.title))
     }
 
 
 def _check_links(md_path: Path) -> list[str]:
     errors: list[str] = []
-    text = md_path.read_text(encoding="utf-8")
-    for lineno, line in _markdown.prose(text.splitlines()):
-        for m in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", line):
-            target = m.group(2)
-            if target.startswith(("http://", "https://", "mailto:")):
-                continue
-            # skip matches inside inline code spans (odd backtick parity before match)
-            if line[: m.start()].count("`") % 2 == 1:
-                continue
-            path_part, _, anchor = target.partition("#")
-            target_file = (
-                (md_path.parent / path_part).resolve() if path_part else md_path
-            )
-            if path_part and not target_file.exists():
-                errors.append(f"{md_path}:{lineno}: broken link — {target}")
-                continue
-            if anchor and target_file.suffix == ".md":
-                slugs = _heading_slugs(target_file.read_text(encoding="utf-8"))
-                if anchor not in slugs:
-                    errors.append(f"{md_path}:{lineno}: missing anchor — {target}")
+    for link in _markdown.read(md_path).links():
+        target = link.target
+        if target.startswith(("http://", "https://", "mailto:")):
+            continue
+        path_part, _, anchor = target.partition("#")
+        target_file = (md_path.parent / path_part).resolve() if path_part else md_path
+        if path_part and not target_file.exists():
+            errors.append(f"{md_path}:{link.no}: broken link — {target}")
+            continue
+        if anchor and target_file.suffix == ".md":
+            slugs = _heading_slugs(target_file.read_text(encoding="utf-8"))
+            if anchor not in slugs:
+                errors.append(f"{md_path}:{link.no}: missing anchor — {target}")
     return errors
 
 
@@ -534,7 +524,7 @@ def _check_vocabulary_identity(md_paths: list[Path]) -> list[str]:
             text = md_path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, PermissionError, OSError):
             continue
-        for lineno, line in _markdown.prose(text.splitlines()):
+        for lineno, line, _ in _markdown.parse(text).text():
             for m in VOCAB_LINE.finditer(line):
                 klass, literal = m.group(1), m.group(2).strip()
                 sightings.setdefault(klass, []).append((literal, md_path, lineno))

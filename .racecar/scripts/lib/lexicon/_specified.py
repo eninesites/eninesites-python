@@ -25,7 +25,7 @@ ROOT_GROUP = "root"
 
 def _declared(g: Graph) -> set[tuple[str, str]]:
     """`(noun, verb)` for every command the list names, the root as `ROOT_GROUP`."""
-    root = root_noun(g.terms)
+    root = root_noun(g.lexicon)
     return {
         (ROOT_GROUP if row.noun == root else row.noun, row.verb)
         for row in g.rows
@@ -43,7 +43,7 @@ def undeclared_rows(g: Graph) -> list[Answer]:
     that is no answer rather than a finding. A spec that does not parse is one finding
     naming the line, never a silent skip.
     """
-    domain = corpus_domain(g.terms)
+    domain = corpus_domain(g.lexicon)
     if g.selected and domain not in g.selected:
         return []
     found = _spec.find_spec(g.root)
@@ -57,7 +57,7 @@ def undeclared_rows(g: Graph) -> list[Answer]:
         return [
             Answer(
                 "",
-                undeclared(domain, root_noun(g.terms), None, g.terms),
+                undeclared(domain, root_noun(g.lexicon), None, g.lexicon),
                 (),
                 (Finding(where, f"cannot be read, so it was not compared: {err}", ""),),
             )
@@ -69,12 +69,12 @@ def undeclared_rows(g: Graph) -> list[Answer]:
         noun, _, verb = ident.rpartition(".")
         if not noun or (noun, verb) in declared:
             continue
-        lexicon_noun = root_noun(g.terms) if noun == ROOT_GROUP else noun
+        lexicon_noun = root_noun(g.lexicon) if noun == ROOT_GROUP else noun
         status = row.get("status") or "exists"
         out.append(
             Answer(
                 "",
-                undeclared(domain, lexicon_noun, verb, g.terms),
+                undeclared(domain, lexicon_noun, verb, g.lexicon),
                 (f"{where}: {ident} ({status})",),
                 (
                     Finding(

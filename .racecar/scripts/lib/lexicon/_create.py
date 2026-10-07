@@ -12,10 +12,10 @@ import sys
 from pathlib import Path
 
 from lib import not_a_command
-from lib.lexicon._audit import find_canon
+from lib.lexicon._corpora import Lexicon, LexiconError
 from lib.lexicon._emit import emit
 from lib.lexicon._graph import graph
-from lib.lexicon._nodes import OK, UNMET, LexiconError
+from lib.lexicon._nodes import OK, UNMET
 from lib.lexicon._scaffold import (
     CREATE_FORMS,
     declare,
@@ -28,7 +28,7 @@ from lib.lexicon.renderer import text
 
 def run(
     root: Path,
-    terms: Path,
+    lexicon: Lexicon,
     selected: list[str],
     *,
     noun: str | None = None,
@@ -47,14 +47,12 @@ def run(
     if noun or verb or params:
         if not noun:
             raise LexiconError("--verb/--param needs --noun")
-        written = declare(
-            terms, noun, verb, params or [], canon=find_canon(root), root=root
-        )
+        written = declare(lexicon, noun, verb, params or [], root=root)
         return {"declared": list(written)}
     if not tuples:
         raise LexiconError(CREATE_FORMS)
-    listed = graph(root, terms, selected)
-    wanted = [parse_tuple(spec, terms) for spec in tuples]
+    listed = graph(root, lexicon, selected)
+    wanted = [parse_tuple(spec, lexicon) for spec in tuples]
     made = [
         path
         for row in wanted
@@ -66,7 +64,7 @@ def run(
 
 def main(
     root: Path,
-    terms: Path,
+    lexicon: Lexicon,
     selected: list[str],
     *,
     noun: str | None = None,
@@ -81,7 +79,7 @@ def main(
     try:
         record = run(
             root,
-            terms,
+            lexicon,
             selected,
             noun=noun,
             verb=verb,

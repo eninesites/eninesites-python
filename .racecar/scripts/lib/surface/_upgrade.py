@@ -68,6 +68,9 @@ def main(
         for line in text.upgrade(result, len(done)):
             print(line)
         print(text.upgrade_tally(result), file=sys.stderr)
+    warning = text.upgrade_warning(result)
+    if warning:
+        print(warning, file=sys.stderr)
     return FINDINGS if result["remaining"] else OK
 
 

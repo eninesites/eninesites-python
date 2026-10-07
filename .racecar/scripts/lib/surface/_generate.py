@@ -2,7 +2,7 @@
 
 Both are renderings of the CLI code, not of the lexicon, which is why they live with the noun
 that builds faces. The lexicon declares, lists and checks entries and writes nothing else, and
-every lexicon page is written by a person.
+every lexicon node is written by a person.
 
 The block is the CLI audit's own rendering (`check_cli_commands.render_tree`), so the README
 shows byte for byte what `make arch` audits and there is no second renderer to drift. The
@@ -100,8 +100,6 @@ def presweep(root: Path) -> tuple[list[str], list[str]]:
     src = package_root(root) / package_of(root)
     no_output: list[str] = []
     unreadable: list[str] = []
-    if not (root / "docs" / "lexicon").is_dir():
-        return no_output, unreadable  # no lexicon: no declared verb to ask about
     for noun, meta in declared(root).items():
         leaf = src.joinpath(*([] if meta["root"] else noun.split(".")), "__main__.py")
         if not leaf.is_file():

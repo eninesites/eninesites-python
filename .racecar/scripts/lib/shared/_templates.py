@@ -13,6 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from ._python import repo_python
+
 
 def _substitute(text: str, subs: dict[str, str]) -> str:
     """`text` with every placeholder in `subs` replaced, in the order `subs` lists them."""
@@ -80,7 +82,10 @@ def format_python(dest: Path, paths: list[Path]) -> list[str]:
     if not files:
         return skipped
     config = str(dest / "pyproject.toml")
-    python = _repo_python(dest)
+    # The repo's own venv holds its isort and black. A delivered script runs under whatever
+    # `python3` started it, and run there a render would skip formatting, so the files it
+    # wrote would fail the repo's own `fmt-check` until `make fmt`.
+    python = repo_python(dest)
     for tool, args in (
         ("isort", ["--settings-path", config]),
         ("black", ["--quiet", "--config", config]),
@@ -95,22 +100,6 @@ def format_python(dest: Path, paths: list[Path]) -> list[str]:
             capture_output=True,
         )
     return skipped
-
-
-def _repo_python(dest: Path) -> str:
-    """The interpreter the repo's own formatters live in: its venv, found in the order
-    racecar.mk finds it (`.venv`, `venv`, `../venv`), else this one.
-
-    A delivered script runs under whatever `python3` started it, and in an adopter that is
-    usually not the venv holding isort and black; run there, a render would skip
-    formatting and the files it wrote would fail the repo's own `fmt-check` until
-    `make fmt`.
-    """
-    for venv in (".venv", "venv", "../venv"):
-        candidate = dest / venv / "bin" / "python"
-        if candidate.is_file():
-            return str(candidate)
-    return sys.executable
 
 
 def _has(python: str, tool: str) -> bool:

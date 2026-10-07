@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from lib.lexicon._corpora import Lexicon, LexiconError
 from lib.lexicon._eligible import reserved_nouns
 from lib.lexicon._graph import (
     Graph,
@@ -19,9 +20,6 @@ from lib.lexicon._graph import (
 )
 from lib.lexicon._nodes import (
     DEFAULT_DOMAIN,
-    FLAG_DIR,
-    LexiconError,
-    corpora,
     corpus_domain,
     root_noun,
     verb_node,
@@ -89,7 +87,7 @@ def scaffold_words(g: Graph, selected: list[str]) -> list[str]:
     made: list[str] = []
     for bucket, users in (("verb", g.verb_users), ("param", g.param_users)):
         for word, who in sorted(users.items()):
-            node = g.terms / bucket / f"{word}.md"
+            node = g.lexicon.own / bucket / f"{word}.md"
             if len(who) < 2 or word_node(g, bucket, word) is not None:
                 continue
             node.parent.mkdir(parents=True, exist_ok=True)
@@ -100,7 +98,7 @@ def scaffold_words(g: Graph, selected: list[str]) -> list[str]:
     return made
 
 
-def parse_tuple(spec: str, terms: Path) -> Row:
+def parse_tuple(spec: str, lexicon: Lexicon) -> Row:
     """`domain/noun/verb` — the spelling `check` hands back and `create --tuple` takes.
 
     Slashes rather than commas so a shell needs no quoting, and three parts because that is
@@ -114,7 +112,7 @@ def parse_tuple(spec: str, terms: Path) -> Row:
             "exactly as `check` prints it"
         )
     domain, noun, verb = parts
-    return Row(domain, noun, verb, verb_node(terms, noun, verb))
+    return Row(domain, noun, verb, verb_node(lexicon, noun, verb))
 
 
 def plan_tuple(row: Row) -> str | None:
@@ -146,23 +144,23 @@ def write_tuple(row: Row, g: Graph) -> str | None:
         )
     if row.node.exists():
         return None
-    # The root page only, not `declare(root=...)`: that would also propose a spec row for a
+    # The root node only, not `declare(root=...)`: that would also propose a spec row for a
     # verb the tree already implements, which is what this verb adopts.
-    _root_page(g.terms, g.root)
-    declare(g.terms, row.noun, verb, (), row.domain)
+    _root_node(g.lexicon, g.root)
+    declare(g.lexicon, row.noun, verb, (), row.domain)
     return str(row.node)
 
 
-def _root_page(terms: Path, root: Path) -> list[str]:
-    """Get-or-create the lexicon's root page, with the repo's README as its parent so every
-    page below it is reachable.
+def _root_node(lexicon: Lexicon, root: Path) -> list[str]:
+    """Get-or-create the lexicon's root node, with the repo's README as its parent so every
+    node below it is reachable.
 
     The root noun is named for the one package under `src/`, else for `[project].name`. A
     repo with no package still serves commands and needs a lexicon (SURFACES.md, "Homes"),
     and the flat `django` shape has none. The directory's name is never used: a worktree or
     a clone names it per checkout, so it would write a wrong noun without a word.
     """
-    readme = terms / "README.md"
+    readme = lexicon.own / "README.md"
     if readme.is_file():
         return []
     package = package_dir(root)
@@ -173,7 +171,7 @@ def _root_page(terms: Path, root: Path) -> list[str]:
             f"{root / 'pyproject.toml'} declares no [project].name, so nothing names the "
             "lexicon's root noun. Declare [project].name, or write that README by hand"
         )
-    terms.mkdir(parents=True, exist_ok=True)
+    lexicon.own.mkdir(parents=True, exist_ok=True)
     readme.write_text(
         _declaration(name, "noun", name, "../../README.md"), encoding="utf-8"
     )
@@ -221,19 +219,18 @@ def _add_params(node: Path, params: list[str]) -> bool:
 
 
 def declare(
-    terms: Path,
+    lexicon: Lexicon,
     noun: str,
     verb: str | None = None,
     params: tuple[str, ...] | list[str] = (),
     domain: str | None = None,
     *,
-    canon: Path | None = None,
     root: Path | None = None,
 ) -> list[str]:
     """Declare a noun, a verb of it, and the verb's params: get-or-create. Returns what changed.
 
     With `root`, the repo the lexicon belongs to, it also gets-or-creates the lexicon's root
-    page, and each verb's row in `surface.jsonl` there: `proposed`, with the params the
+    node, and each verb's row in `surface.jsonl` there: `proposed`, with the params the
     lexicon declares, until a face builds it.
 
     Each node is written only where it is absent, and a verb node that exists gains only
@@ -241,21 +238,21 @@ def declare(
     A sub-noun (`graph.ontology`) declares each noun above it the same way. A param is
     listed in the verb's `params:` and gets a node at `param/<name>.md` where it has none, with
     `defined: false` and the type and defaults of a guess (`_param_nodes`) -- except that a
-    word `canon` already types is written with canon's type. What any of them means is not
+    word the union already types is written with that type. What any of them means is not
     derivable, so every summary is a TODO for a person to write.
     """
     if params and verb is None:
         raise LexiconError(f"{noun}: a param belongs to a verb; name one with --verb")
-    changed: list[str] = [] if root is None else _root_page(terms, root)
-    domain = domain or corpus_domain(terms)
-    parts = [] if noun == root_noun(terms) else noun.split(".")
-    if parts and parts[0] in reserved_nouns(terms):
+    changed: list[str] = [] if root is None else _root_node(lexicon, root)
+    domain = domain or corpus_domain(lexicon)
+    parts = [] if noun == root_noun(lexicon) else noun.split(".")
+    if parts and parts[0] in reserved_nouns(lexicon):
         raise LexiconError(
             f"`{parts[0]}` is reserved by racecar's delivered lexicon and is not a noun a "
             "repo may declare; name the noun for what it does"
         )
     for depth in range(1, len(parts) + 1):
-        readme = terms.joinpath(*parts[:depth], "README.md")
+        readme = lexicon.own.joinpath(*parts[:depth], "README.md")
         if not readme.is_file():
             readme.parent.mkdir(parents=True, exist_ok=True)
             readme.write_text(
@@ -264,7 +261,7 @@ def declare(
             )
             changed.append(str(readme))
     if verb is not None:
-        node = verb_node(terms, noun, verb)
+        node = verb_node(lexicon, noun, verb)
         if not node.is_file():
             node.write_text(
                 _declaration(
@@ -275,21 +272,21 @@ def declare(
             changed.append(str(node))
         elif _add_params(node, list(params)):
             changed.append(str(node))
-        changed += [
-            str(path) for path in _param_nodes(terms, domain, list(params), canon)
-        ]
+        changed += [str(path) for path in _param_nodes(lexicon, domain, list(params))]
         if root is not None:
-            changed += _spec_row(terms, root, noun, verb, node)
+            changed += _spec_row(lexicon, root, noun, verb, node)
     return changed
 
 
-def _spec_row(terms: Path, root: Path, noun: str, verb: str, node: Path) -> list[str]:
+def _spec_row(
+    lexicon: Lexicon, root: Path, noun: str, verb: str, node: Path
+) -> list[str]:
     """Get-or-create the verb's row in the repo's `surface.jsonl`.
 
     A `proposed` row takes the params the lexicon declares for the verb; a built row's
     params are its function's, which the face that built it wrote, so they are left alone.
     """
-    group = _spec.ROOT_GROUP if noun == root_noun(terms) else noun
+    group = _spec.ROOT_GROUP if noun == root_noun(lexicon) else noun
     spec = _spec.spec_path(root)
     ident = _spec.row_id(group, verb)
     rows = _spec.read_rows(spec) if spec.is_file() else []
@@ -304,21 +301,18 @@ def _spec_row(terms: Path, root: Path, noun: str, verb: str, node: Path) -> list
     )
 
 
-def _known_type(terms: Path, canon: Path | None, name: str) -> str | None:
+def _known_type(lexicon: Lexicon, name: str) -> str | None:
     """The `type:` an existing node for `name` declares, or None where none does.
 
-    Looked up where the lexicon itself finds a word: the corpora `terms` joins, the
-    delivered one included, then canon. So a word racecar delivers, such as `json`, keeps
-    its type in a repo with no racecar checkout.
+    Looked up in the union, home by home in precedence order, taking the first node that
+    declares a type. So a word racecar delivers, such as `json`, keeps its type in a repo
+    with no racecar checkout.
     """
-    nodes = [root / "param" / f"{name}.md" for root in corpora(terms)]
-    if canon is not None:
-        nodes.append(canon / FLAG_DIR / f"{name}.md")
-    for node in nodes:
-        if node.is_file():
-            declared = _frontmatter.load(node).get("type")
-            if declared:
-                return str(declared)
+    position = f"param/{name}.md"
+    for entry in (e for e in lexicon.entries if e.position == position):
+        declared = _frontmatter.load(lexicon.path(entry)).get("type")
+        if declared:
+            return str(declared)
     return None
 
 
@@ -338,9 +332,7 @@ def _param_tree(tree: Path, domain: str) -> list[Path]:
     return [readme]
 
 
-def _param_nodes(
-    terms: Path, domain: str, params: list[str], canon: Path | None = None
-) -> list[Path]:
+def _param_nodes(lexicon: Lexicon, domain: str, params: list[str]) -> list[Path]:
     """Write `param/<name>.md` for each param that has no node yet. Returns what it wrote.
 
     A node that exists is left exactly as it is, so the second verb to take a word takes it
@@ -352,7 +344,7 @@ def _param_nodes(
     """
     written: list[Path] = []
     for name in params:
-        node = terms / "param" / f"{name}.md"
+        node = lexicon.own / "param" / f"{name}.md"
         if node.exists():
             continue
         node.parent.mkdir(parents=True, exist_ok=True)
@@ -363,7 +355,7 @@ def _param_nodes(
                 "param",
                 domain,
                 "README.md",
-                type=_known_type(terms, canon, name) or "string",
+                type=_known_type(lexicon, name) or "string",
                 required="false",
                 defined="false",
                 position="[]",

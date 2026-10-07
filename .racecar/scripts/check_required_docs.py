@@ -37,12 +37,10 @@ import re
 import sys
 from pathlib import Path
 
-from lib.shared import _frontmatter
+from lib.shared import _frontmatter, _markdown
 from lib.shared._agent_docs import AGENT_DOC_NAMES
 from lib.shared._report import Findings, emit
 from lib.shared._root import find_repo_root
-
-H2_RE = re.compile(r"^##\s+\S", re.MULTILINE)
 
 # ---------------------------------------------------------------------------
 # Frontmatter
@@ -158,7 +156,7 @@ def check_agent_doc(repo_root: Path, f: Findings) -> None:
         text = content.read_text(encoding="utf-8")
         if not text.strip():
             f.error(f"empty: {primary}")
-        elif not H2_RE.search(text):
+        elif not _markdown.parse(text).headings(2):
             f.error(f"no H2 heading: {primary}")
     link = repo_root / pointer
     if link.is_symlink():

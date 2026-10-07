@@ -99,9 +99,18 @@ def upsert_row(spec: Path, ident: str, group: str, fields: dict[str, Any]) -> bo
 
 
 def read_rows(spec: Path) -> list[dict[str, Any]]:
-    """Every row of the spec, in order. Raises `SpecError` on a line that is not an object."""
+    """Every row of the spec, in order.
+
+    Raises `SpecError` on a file that cannot be read as UTF-8 text, a line that is not a JSON
+    object, or a row with no string `id`: every row is keyed by its `id`, so a row without one
+    cannot be graded, and a reader must not meet it as a KeyError.
+    """
     rows: list[dict[str, Any]] = []
-    for n, line in enumerate(spec.read_text(encoding="utf-8").splitlines(), start=1):
+    try:
+        text = spec.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise SpecError(f"{spec}: cannot be read as UTF-8 text — {exc}") from exc
+    for n, line in enumerate(text.splitlines(), start=1):
         if not line.strip():
             continue
         try:
@@ -112,6 +121,8 @@ def read_rows(spec: Path) -> list[dict[str, Any]]:
             raise SpecError(
                 f"{spec}:{n}: a row is a JSON object, not {type(row).__name__}"
             )
+        if not isinstance(row.get("id"), str) or not row["id"]:
+            raise SpecError(f"{spec}:{n}: a row has no `id`; every row is keyed by one")
         rows.append(row)
     return rows
 

@@ -12,6 +12,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Changed
 
+- racecar's delivered files synced to `4f4a72b6`. The package gains `lib/error/`, racecar's
+  error packet schema and its types, which nothing uses yet. `lib/cli.py` is racecar's own
+  again: racecar now exits 2 on a missing required argument, as this CLI already did.
+
 - racecar's delivered files synced to `ccd3547`; `pylint` pinned to 4.0.9, the version racecar
   lints its delivered files under.
 

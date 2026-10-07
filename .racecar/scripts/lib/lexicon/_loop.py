@@ -12,9 +12,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from lib.lexicon import _checks, _params, _shipped, _specified
+from lib.lexicon import _audit, _checks, _params, _shipped, _specified
 from lib.lexicon._graph import Answer, Finding, Graph, Row, row_order
-from lib.lexicon._nodes import FLAG_DIR, NOUN_DIR
 from lib.lexicon._scaffold import scaffold_words
 from lib.lexicon._terms import read_terms, retirements, scan
 
@@ -369,14 +368,18 @@ def checked(g: Graph, *, apply: bool = False) -> Checked:
         extra += _checks.findings(g)
     # CHANGELOG.md is a RECORD: it says what was true at the time and is never rewritten.
     extra += _checks.command_prose_findings(g, exempt=("CHANGELOG.md",))
-    extra += _checks.check_index(g.root, FLAG_DIR, "type", apply)
-    extra += _checks.check_index(g.root, NOUN_DIR, "kind", apply)
+    extra += _checks.check_index(g.lexicon, "param", "type", apply)
+    extra += _checks.check_index(g.lexicon, "", "kind", apply)
     out += [record("Major", _short(f.where, g.root), f.method, f.what) for f in extra]
-    words = read_terms(g.root)
+    out += [
+        record("Minor", _short(where, g.root), "flag-type", what)
+        for where, what in _audit.flag_clashes(g.lexicon)
+    ]
+    words = read_terms(g.lexicon)
     if words:
         out += [
             record("Major", hit.where(), "retired", hit.message())
-            for hit in scan(g.root, words, retirements(words))[1]
+            for hit in scan(g.lexicon, words, retirements(words))[1]
         ]
     unique = list({tuple(r.items()): r for r in out}.values())
     return Checked(unique, made, answers)

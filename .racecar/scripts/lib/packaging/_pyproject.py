@@ -18,7 +18,7 @@ from ..shared._constants import (
     FORBIDDEN_TOOL_KEYS,
     SEMVER_RE,
 )
-from ..shared._root import package_dir
+from ..shared._root import package_dir, server_root
 from ._common import _dist_name, _is_type_stub, _rel_for_audit, _toml_load
 from ._findings import Finding
 
@@ -174,12 +174,11 @@ def check_library_pyproject(  # pylint: disable=too-many-locals,too-many-stateme
         findings += check_dev_pins(dev, label)
 
     # Django shapes must carry djhtml in [dependency-groups].django (PACKAGING.md
-    # §6). Keyed on manage.py so non-Django repos are never flagged. Entries may be
-    # version-pinned ("djhtml>=3.0"), so compare on the distribution name only.
-    is_django = (root / "manage.py").exists() or (
-        root / "server" / "manage.py"
-    ).exists()
-    if is_django:
+    # §6). Keyed on where Django lives (`server_root`), so non-Django repos are never
+    # flagged, and a root manage.py beside a library is not Django, as `detect_shape`
+    # decides. Entries may be version-pinned ("djhtml>=3.0"), so compare on the
+    # distribution name only.
+    if server_root(root) is not None:
         django_group = groups.get("django")
         django_names = (
             {_dist_name(d) for d in django_group if isinstance(d, str)}

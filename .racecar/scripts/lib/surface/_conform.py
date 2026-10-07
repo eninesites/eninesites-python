@@ -12,9 +12,10 @@ What `upgrade` does by itself is narrow on purpose, because the thing it must ne
 break code that runs:
 
 - write a missing package file (`errors.py`, `schema.py`, `lib/cli.py`,
-  `lib/renderer/json.py`, the root `__main__.py`) only when nothing else in the package
-  already defines what that file would, since a second `ApiError` beside the first is a
-  second home, not a fix;
+  `lib/renderer/json.py`, the three `lib/error/` modules, the root `__main__.py`) only when
+  nothing else in the package already defines what that file would, since a second
+  `ApiError` beside the first is a second home, not a fix. The `lib/error/` modules are
+  copied from `scripts/lib/shared/error/`, not rendered from the template;
 - write a noun's missing package markers and renderer, and its `lib/results.py` only when
   no module of the noun declares a TypedDict already;
 - build a declared noun that has no code at all, and add a declared verb to a noun that
@@ -41,7 +42,6 @@ from ._edit import _defined, _keys, _literal, _tree, add_entry
 from ._error import SurfaceError
 from ._form import (
     TEMPLATE,
-    TERMS,
     Break,
     Noun,
     _code_text,
@@ -51,6 +51,7 @@ from ._form import (
     noun_of,
     noun_state,
     package_of,
+    package_source,
     package_state,
 )
 from ._invocations import KEY, absent
@@ -62,6 +63,9 @@ _PACKAGE_WRITES: dict[str, tuple[str, ...]] = {
     "schema.py": ("returns", "conforms"),
     "lib/cli.py": ("NounParser", "VerbParser", "parse_args"),
     "lib/renderer/json.py": ("add_flag", "print_json", "show"),
+    "lib/error/__init__.py": (),
+    "lib/error/_schema.py": ("SCHEMA",),
+    "lib/error/_packet.py": ("ErrorPacket", "packet"),
 }
 #: A noun's files `upgrade` may write when absent; `__main__.py` and `api.py` never, since
 #: a noun missing either is not this form with a gap but a different shape.
@@ -140,7 +144,9 @@ def _subs(root: Path, package: str, n: Noun | None = None) -> dict[str, str]:
     subs = {"__PKG__": package}
     if n is not None:
         lexicon = _lexicon(root)
-        summary = _code_text(lexicon.describe(root / TERMS, n.noun)["summary"])
+        summary = _code_text(
+            lexicon.describe(lexicon.lexicon_corpora(root), n.noun)["summary"]
+        )
         subs = {
             "__CLI__": n.cli,
             "__MODULE__": n.module,
@@ -252,8 +258,12 @@ def _package_items(root: Path, package: str) -> list[Item]:
             )
             items.append(Item("move-names", f"{dest}: absent", text, None))
         else:
-            write = _write(TEMPLATE / "package" / rel, dest, {"__PKG__": package})
-            text = f"write {dest} from the template"
+            source = package_source(rel)
+            write = _write(source, dest, {"__PKG__": package})
+            origin = (
+                "the template" if source.is_relative_to(TEMPLATE) else source.parent
+            )
+            text = f"write {dest} from {origin}"
             items.append(Item("write-file", f"{dest}: absent", text, write))
     main = pkg / "__main__.py"
     if not main.exists():
@@ -443,11 +453,13 @@ def declared(root: Path) -> dict[str, dict[str, Any]]:
     The root noun (the package itself) is keyed by its own name with `"root": True`.
     """
     lexicon = _lexicon(root)
-    terms = root / TERMS
+    corpora = lexicon.lexicon_corpora(root)
     out: dict[str, dict[str, Any]] = {}
-    for chain in sorted(lexicon.eligible_nouns(terms, lexicon.eligible_domains(terms))):
-        name = ".".join(chain) if chain else lexicon.root_noun(terms)
-        described = dict(lexicon.describe(terms, name))
+    for chain in sorted(
+        lexicon.eligible_nouns(corpora, lexicon.eligible_domains(corpora))
+    ):
+        name = ".".join(chain) if chain else lexicon.root_noun(corpora)
+        described = dict(lexicon.describe(corpora, name))
         if described["verbs"]:
             described["root"] = not chain
             out[name] = described

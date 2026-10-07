@@ -3,9 +3,9 @@
 `check` reads code and never runs it; this runs it. Every command in the repo's
 `surface.jsonl` is listed, and each one the spec marks `read` (a verb that changes nothing,
 `arch-python/SURFACES.md`) is run once, with `--json`, from the repo root. `read` says
-nothing about arguments: a verb that requires one answers a bare run with its help, exit 0
-and `<prog>: needs <arguments>` on stderr (`arch-python/CLI.md` B2). That help is not the
-verb's output, so it gets no verdict, and the record says what the verb needs. A write or
+nothing about arguments: a verb that requires one answers a bare run with its help on stderr,
+`<prog>: needs <arguments>` as the last line, and exit 2 (`arch-python/CLI.md` B2). That is
+not the verb's output, so it gets no verdict, and the record says what the verb needs. A write or
 job verb is never run. A repo with no
 `surface.jsonl` has no such declaration, so its commands, read from the command tree its code
 builds, are listed and none is run.
@@ -36,6 +36,7 @@ from typing import Any
 
 from lib import not_a_command
 from lib.shared import _spec
+from lib.shared._python import repo_python
 
 from ._faces import acting_on, default_api
 from ._form import offered, package_of
@@ -49,15 +50,6 @@ _NEEDS = ": needs "
 #: Seconds one command may run before it counts as returning nothing.
 TIMEOUT = 300
 _WORKERS = 4
-
-
-def _python(root: Path) -> str:
-    """The repo's own interpreter, where it has a virtualenv; else this one."""
-    for venv in (".venv", "venv"):
-        candidate = root / venv / "bin" / "python"
-        if candidate.is_file():
-            return str(candidate)
-    return sys.executable
 
 
 def _pair(module: str, verb: str, package: str) -> tuple[str, str]:
@@ -115,8 +107,8 @@ def _probe(
         return _record(pair, None, None)
     prefix = f"python -m {module} {verb}{_NEEDS}"
     for line in done.stderr.splitlines():
-        if done.returncode == 0 and line.startswith(prefix):
-            return _record(pair, None, 0, line[len(prefix) :].split(", "))
+        if line.startswith(prefix):
+            return _record(pair, None, done.returncode, line[len(prefix) :].split(", "))
     return _record(pair, parsed(done.stdout), done.returncode)
 
 
@@ -147,7 +139,7 @@ def probed(root: Path, noun: str | None = None) -> list[dict[str, Any]]:
     """One `{noun, verb, json, exit, needs}` per cli command, in the spec's order."""
     package = package_of(root)
     listed = [c for c in _commands(root, package) if noun is None or c[0][0] == noun]
-    python = _python(root)
+    python = repo_python(root)
     # Never itself: marked `read`, it is in the list it runs, and each copy would run the next.
     runnable = [
         pair for pair, run in listed if run and pair != ("surface", "check-json")

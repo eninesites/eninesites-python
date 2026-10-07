@@ -42,27 +42,30 @@ import sys
 from pathlib import Path
 
 from lib.lexicon import _check, _create, _derive, _list
+from lib.lexicon._corpora import Lexicon, LexiconError, lexicon_corpora
 from lib.lexicon._eligible import eligible_domains
 from lib.lexicon._nodes import (
-    CANON_ENV,
-    DEFAULT_TERMS,
-    FLAG_DIR,
     OK,
     UNMET,
-    LexiconError,
     find_root,
 )
 from lib.lexicon.renderer import text
 from lib.shared import _cli
 
 
-def _resolve(args: argparse.Namespace) -> tuple[Path, Path, list[str]]:
+def _resolve(args: argparse.Namespace) -> tuple[Path, Lexicon, list[str]]:
+    """The repo, its lexicon (built once, here, and handed to every verb) and the domains."""
     root = args.root.resolve() if args.root else find_root()
-    terms = args.data.resolve() if args.data else root / DEFAULT_TERMS
-    selected = eligible_domains(
-        terms, getattr(args, "domain", None), every=getattr(args, "all", False)
+    canon = getattr(args, "canon", None)
+    lexicon = lexicon_corpora(
+        root,
+        own=args.data.resolve() if args.data else None,
+        canon=canon.resolve() if canon else None,
     )
-    return root, terms, selected
+    selected = eligible_domains(
+        lexicon, getattr(args, "domain", None), every=getattr(args, "all", False)
+    )
+    return root, lexicon, selected
 
 
 def _add_common(sub: argparse.ArgumentParser) -> None:
@@ -100,8 +103,8 @@ def parser(prog: str = "lexicon.py") -> argparse.ArgumentParser:
         "--canon",
         type=Path,
         default=None,
-        help=f"the racecar checkout holding {FLAG_DIR} (default: ${CANON_ENV}, "
-        "the installed skill, or this repo)",
+        help="a repo whose lexicon joins the union as canon (default: canon is what "
+        "racecar delivered into this repo)",
     )
     check.add_argument(
         "--apply",
@@ -239,13 +242,13 @@ def main(argv: list[str] | None = None, prog: str = "lexicon.py") -> int:
         return OK
 
     try:
-        root, terms, selected = _resolve(args)
+        root, lexicon, selected = _resolve(args)
     except LexiconError as err:
         print(text.cannot_run(err), file=sys.stderr)
         return UNMET
 
     # `create` is what makes a lexicon, so a repo without one is where it starts.
-    if not terms.exists() and args.phase != "create":
+    if not lexicon.entries and args.phase != "create":
         as_json = getattr(args, "json", False)
         print(
             text.no_lexicon(root),
@@ -260,11 +263,11 @@ def main(argv: list[str] | None = None, prog: str = "lexicon.py") -> int:
     # invocation of this script means.
     dispatch = {
         "list": lambda: _list.main(
-            terms, selected, kind=args.kind, as_json=args.json, output=args.output
+            lexicon, selected, kind=args.kind, as_json=args.json, output=args.output
         ),
         "create": lambda: _create.main(
             root,
-            terms,
+            lexicon,
             selected,
             noun=args.noun,
             verb=args.verb,
@@ -275,7 +278,7 @@ def main(argv: list[str] | None = None, prog: str = "lexicon.py") -> int:
             output=args.output,
         ),
         "derive": lambda: _derive.main(
-            root, terms, apply=args.apply, as_json=args.json
+            root, lexicon, apply=args.apply, as_json=args.json
         ),
     }
     run = dispatch.get(args.phase)
@@ -285,9 +288,8 @@ def main(argv: list[str] | None = None, prog: str = "lexicon.py") -> int:
             if run
             else _check.main(
                 root,
-                terms,
+                lexicon,
                 selected,
-                canon=args.canon,
                 apply=args.apply,
                 answers=args.answers,
                 strict=args.strict,

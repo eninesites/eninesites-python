@@ -25,11 +25,11 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from lib import not_a_command
-from lib.lexicon._audit import _flat_args, cli_tree, find_canon
+from lib.lexicon._audit import _flat_args, cli_tree
+from lib.lexicon._corpora import OWN, Lexicon, LexiconError
 from lib.lexicon._emit import emit
 from lib.lexicon._nodes import (
     OK,
-    LexiconError,
     _params_of,
     root_noun,
     verb_node,
@@ -108,24 +108,25 @@ def implemented(root: Path) -> dict[str, dict[str, list[str]]]:
     return found
 
 
-def derive(root: Path, terms: Path) -> list[Derived]:
-    """Every noun, verb and param the cli implements and `terms` does not declare.
+def derive(root: Path, lexicon: Lexicon) -> list[Derived]:
+    """Every noun, verb and param the cli implements and the lexicon does not declare.
 
     One entry per `lexicon create` it would take, in the audit's order: a noun with no
     entry, a verb with no entry (with all its params), or a declared verb missing some
     params (with only those). The package root's verbs sit under the lexicon's root noun.
     """
-    if not (terms / "README.md").is_file():
+    if lexicon.at("README.md", OWN) is None:
         raise LexiconError(
-            f"{terms}: no lexicon root (README.md); a derived entry needs a corpus to join"
+            f"{lexicon.own}: no lexicon root (README.md); a derived entry needs a corpus "
+            "to join"
         )
     out: list[Derived] = []
     for noun, verbs in implemented(root).items():
-        name = noun or root_noun(terms)
-        if noun and not verb_node(terms, name, None).is_file():
+        name = noun or root_noun(lexicon)
+        if noun and not verb_node(lexicon, name, None).is_file():
             out.append(Derived(name, None, ()))
         for verb, params in verbs.items():
-            node = verb_node(terms, name, verb)
+            node = verb_node(lexicon, name, verb)
             listed = set(_params_of(node)) if node.is_file() else set()
             missing = tuple(p for p in params if p not in listed)
             if not node.is_file():
@@ -135,30 +136,28 @@ def derive(root: Path, terms: Path) -> list[Derived]:
     return out
 
 
-def apply_derived(
-    terms: Path, derived: list[Derived], canon: Path | None = None
-) -> list[str]:
+def apply_derived(lexicon: Lexicon, derived: list[Derived]) -> list[str]:
     """Run each derived `create` through `declare`; the paths written, in order."""
     written: list[str] = []
     for entry in derived:
-        written += declare(
-            terms, entry.noun, entry.verb, list(entry.params), canon=canon
-        )
+        written += declare(lexicon, entry.noun, entry.verb, list(entry.params))
     return written
 
 
-def run(root: Path, terms: Path, *, apply: bool = False) -> dict[str, list[str]]:
+def run(root: Path, lexicon: Lexicon, *, apply: bool = False) -> dict[str, list[str]]:
     """`{"commands", "declared"}`: the create commands the cli implies, and with `apply`
     the lexicon paths running them wrote. One CLI audit, so what is printed and what is
     applied are the same list."""
-    found = derive(root, terms)
-    written = apply_derived(terms, found, find_canon(root)) if apply else []
+    found = derive(root, lexicon)
+    written = apply_derived(lexicon, found) if apply else []
     return {"commands": [e.command() for e in found], "declared": written}
 
 
-def main(root: Path, terms: Path, *, apply: bool = False, as_json: bool = False) -> int:
+def main(
+    root: Path, lexicon: Lexicon, *, apply: bool = False, as_json: bool = False
+) -> int:
     """Print the `create` commands the cli implies; with `--apply`, run them."""
-    record = run(root, terms, apply=apply)
+    record = run(root, lexicon, apply=apply)
     if as_json:
         emit(record, None)
     else:

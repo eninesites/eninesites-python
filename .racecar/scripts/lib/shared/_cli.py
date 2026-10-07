@@ -8,11 +8,13 @@ names each:
   check --for` prints `graph`'s help and never mentions `check` or `--for`. Each verb's
   parser records itself when argparse chooses it, and `parse_args(parser, argv)` reports
   leftovers through that parser's own `error()`.
-- **A missing required argument is a usage error, exit 2.** It is not one: the caller has not
-  finished asking, and nothing ran and failed (`architecture/R09-surfaces`). `VerbParser` sends
-  the verb's help to stdout, one line naming what is missing to stderr, and exits 0. An
-  unknown argument on the same command line wins: a caller that typed a flag the verb does
-  not have asked for something it cannot do, so that is reported, exit 2.
+- **A missing required argument is reported as argparse's `the following arguments are
+  required`.** `VerbParser` names it in the form's own words instead: the verb's help on
+  stderr, then `<prog>: needs <arguments>` as the last line, exit 2. Nothing ran, so the exit
+  code says so, and a script or a scheduler never reads a command that did not run as one
+  that succeeded (`architecture/R09-surfaces`). An unknown argument on the same command line
+  wins: a caller that typed a flag the verb does not have asked for something it cannot do,
+  so that is what is reported.
 - **An unknown verb is reported as `argument phase: invalid choice`.** `phase` is where a node
   stores the chosen verb, an internal name the lexicon matches schemas on. `NounParser` tells
   the reader `unknown verb 'chek'; did you mean 'check'?` instead, or lists the verbs.
@@ -163,13 +165,13 @@ class _Verbs:
 class VerbParser(argparse.ArgumentParser):
     """A verb's parser, and any parser without verbs: a bad invocation gets help, not a rebuke.
 
-    A missing required argument prints this parser's help to stdout, names what is missing on
-    stderr, and exits 0: the caller has not finished asking, and nothing ran and failed. A
+    A missing required argument prints this parser's help to stderr, then names what is
+    missing as the last line (`<prog>: needs <arguments>`), and exits 2: nothing ran. A
     required group of alternatives left empty is the same case, and is named as the
     alternatives (`needs --surface or --all`). It yields to an unknown argument on the same
     command line, which `parse_args` reports first.
     Anything else prints the help to stderr, then argparse's own message as the last line,
-    and exits 2.
+    and exits 2. stdout stays empty in every case, so under `--json` it never holds text.
     """
 
     def error(self, message: str) -> NoReturn:
@@ -179,11 +181,9 @@ class VerbParser(argparse.ArgumentParser):
             needed = message[len(MISSING) :]
         elif message.startswith(ONE_OF[0]) and message.endswith(ONE_OF[1]):
             needed = " or ".join(message[len(ONE_OF[0]) : -len(ONE_OF[1])].split())
-        if needed is not None:
-            self.print_help()
-            print(f"{self.prog}: needs {needed}", file=sys.stderr)
-            self.exit(0)
         self.print_help(sys.stderr)
+        if needed is not None:
+            self.exit(2, f"{self.prog}: needs {needed}\n")
         self.exit(2, f"{self.prog}: error: {message}\n")
 
 
@@ -320,8 +320,8 @@ def parse_args(
 
     An unknown argument is looked for FIRST, with every requirement relaxed. argparse checks
     for a missing required argument inside `parse_known_args`, before it returns the ones it
-    did not recognise, so a single parse takes `show --bogus` to B2's help-and-exit-0
-    and never mentions `--bogus`. The cost is a second parse, and no `type=` in racecar
+    did not recognise, so a single parse takes `show --bogus` to B2's `needs` line and
+    never mentions `--bogus`. The cost is a second parse, and no `type=` in racecar
     opens a file.
     """
     argv = list(sys.argv[1:] if argv is None else argv)

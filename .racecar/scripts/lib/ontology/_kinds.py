@@ -91,7 +91,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from lib.lexicon._nodes import ONTOLOGY_DIRNAME, corpora, graph_kinds
+from lib.lexicon._corpora import home_directories
+from lib.lexicon._nodes import ONTOLOGY_DIRNAME, graph_kinds
 from lib.shared import _frontmatter
 from lib.topology import _walk
 
@@ -229,20 +230,15 @@ def _ontology_sources(meta: Path) -> list[Path]:
     """**Step two for the ontology.** One ontology directory per joined corpus, in that
     order, skipping a corpus that holds none.
 
-    `meta` is an ontology directory, so the corpus is `meta.parent` and `corpora` does
-    the joining. Anything that is not a directory named `ontology` is one source and
+    `meta` is an ontology directory, and `home_directories` names the same directory in every
+    home of the lexicon union. Anything that is not a directory named `ontology` is one source and
     nothing else: `load_ontology` is also called with a plain corpus root
     (`racecar.graph`'s build, when no `--meta` is named) and with a bare `.yaml` path,
     and neither is a corpus whose peers this should go looking for.
     """
     if not meta.is_dir() or meta.name != ONTOLOGY_DIRNAME:
         return [meta]
-    out: list[Path] = []
-    for corpus in corpora(meta.parent):
-        candidate = corpus / ONTOLOGY_DIRNAME
-        if candidate.is_dir():
-            out.append(candidate)
-    return out or [meta]
+    return home_directories(meta)
 
 
 # How a kind node is read, how a graph-shaped ontology is told from a document, and how
@@ -292,7 +288,7 @@ def load_ontology(meta: Path) -> dict[str, Any] | None:
     source and neither widened nor narrowed here.
 
     Several trees union their kinds, and **a kind declared in more than one of them resolves
-    to the first** — `corpora` puts them in resolution order, custom before the repo's own
+    to the first** — `lexicon_corpora` puts them in resolution order, custom before the repo's own
     before the delivered corpus, so the most specific declaration wins and canon is the
     fallback. A repo can therefore narrow a delivered kind, which `shadowed_kinds` reports
     rather than applying in silence. The corpus-level keys resolve the same way, first tree

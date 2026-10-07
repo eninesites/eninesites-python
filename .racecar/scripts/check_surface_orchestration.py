@@ -47,9 +47,10 @@ This script is the surface, not the gate. It is ADVISORY: exit 0 by default,
      A unit with a surface but NO `api` is SILENT: the api is the anchor; with none
      named/mapped there is nothing to verify, and the detector does not nag.
 
-Pure stdlib (tomllib + ast). Shape comes from check_packaging.detect_shape; the
-source-root resolution and package walk (`_src_roots` / `_top_packages` / `_dotted`)
-are local helpers below. The library pyproject is found by shape detection.
+Pure stdlib (tomllib + ast). Shape comes from check_packaging.detect_shape. The library's
+verticals are walked inside its one package, `package_dir` (lib/shared/_root.py); with no
+package there is no library to grade, and the reason says so in the owner's wording
+(`not_present`). The library pyproject is found by shape detection.
 
 Usage (invoked by `make arch`):
     python scripts/check_surface_orchestration.py [--root <dir>] [--threshold N] [--strict]
@@ -72,6 +73,7 @@ from typing import Any
 
 from check_packaging import Shape, detect_shape
 from lib.shared._constants import DELIVERY_DIR
+from lib.shared._root import not_present, package_dir
 
 # Minimum length of a repeated api-call sequence to flag as restated orchestration.
 # A single shared call is legitimate (each surface calls its api entry once); two or
@@ -134,34 +136,6 @@ def _manifest(pyproject: Path) -> list[dict[str, Any]]:
     return [v for v in verticals if isinstance(v, dict)]
 
 
-def _src_roots(root: Path, shape_name: str) -> list[Path]:
-    """Directories under which top-level importable packages live, per shape.
-
-    `server/` is NOT walked for units: the whole server is one django surface (§7),
-    discovered separately by `_django_vertical`, not a bag of per-app verticals.
-    """
-    roots: list[Path] = []
-    if shape_name in ("src", "src+server"):
-        roots.append(root / "src")
-    # The flat shapes keep the package at the root, which the line below already walks.
-    roots.append(root)
-    return [r for r in roots if r.is_dir()]
-
-
-def _top_packages(src_roots: list[Path]) -> list[Path]:
-    """Directories that are importable top-level packages (have __init__.py)."""
-    pkgs: list[Path] = []
-    seen: set[Path] = set()
-    for src_root in src_roots:
-        for child in sorted(src_root.iterdir()):
-            if child in seen:
-                continue
-            if child.is_dir() and (child / "__init__.py").is_file():
-                seen.add(child)
-                pkgs.append(child)
-    return pkgs
-
-
 def _dotted(pkg_root: Path, directory: Path) -> str:
     """Dotted module name of `directory` relative to its top package's parent."""
     rel = directory.relative_to(pkg_root.parent)
@@ -198,7 +172,7 @@ def _has_role(name: str, files: dict[str, Path], subpkgs: set[str]) -> bool:
     return name in files or name in subpkgs
 
 
-def _discover_verticals(src_roots: list[Path]) -> list[Vertical]:
+def _discover_verticals(packages: list[Path]) -> list[Vertical]:
     """A unit is a package that OWNS a surface (SURFACES.md §7).
 
     Surfaces are the only anchors, detected by name: `cli` = `__main__.py`; `mcp` =
@@ -214,7 +188,7 @@ def _discover_verticals(src_roots: list[Path]) -> list[Vertical]:
     """
     verticals: list[Vertical] = []
     seen: set[Path] = set()
-    for pkg in _top_packages(src_roots):
+    for pkg in packages:
         for directory in [pkg, *sorted(p for p in pkg.rglob("*") if p.is_dir())]:
             if directory in seen or directory.name in NON_VERTICAL_DIRS:
                 continue
@@ -639,13 +613,17 @@ def _survey(root: Path) -> tuple[list[Vertical], dict[str, dict[str, Any]], str 
     pyproject = _library_pyproject(shape)
     if pyproject is None:
         return [], {}, "pyproject.toml not found; nothing to check"
-    src_roots = _src_roots(root, shape.name)
-
-    verticals = _discover_verticals(src_roots)
+    # The library's verticals live in its one package (`package_dir`), never in a walk of
+    # `src/` or the repo root: with no package there is no library to grade. The Django
+    # vertical is found apart, where `server_root` says Django lives.
+    package = package_dir(root)
+    verticals = _discover_verticals([package] if package is not None else [])
     django = _django_vertical(root, shape)
     if django is not None:
         verticals.append(django)
     if not verticals:
+        if package is None:
+            return [], {}, not_present(root)
         return [], {}, "no surfaces verticals found; nothing to check"
 
     # Keyed by BOTH spellings, because the lookup below tries both. An entry written
@@ -686,6 +664,15 @@ def findings(root: Path, threshold: int = DEFAULT_THRESHOLD) -> list[Finding]:
     if skip is not None:
         return []
     return _findings(verticals, manifest_by_prefix, threshold, root)
+
+
+def skipped(root: Path) -> str | None:
+    """Why there was nothing to grade here, or None when there was something.
+
+    `findings` returns an empty list both for a clean tree and for one with nothing to check.
+    A caller that must not print OK for the second asks this.
+    """
+    return _survey(root)[2]
 
 
 def render(records: list[Finding]) -> str:

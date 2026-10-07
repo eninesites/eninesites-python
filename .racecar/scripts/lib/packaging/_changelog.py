@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
-from ._findings import Finding
+from lib.shared import _markdown
+from lib.shared._constants import RELEASE_TITLE_RE, UNRELEASED_TITLE
 
-# A released entry (`## X.Y.Z - YYYY-MM-DD`) or the honest `## [Unreleased]`
-# header a freshly-scaffolded changelog carries before its first release.
-_CHANGELOG_HEADER_RE = re.compile(
-    r"^## (?:\[Unreleased\]|\d+\.\d+\.\d+(?:[-+][\w.-]+)? - \d{4}-\d{2}-\d{2})",
-    re.MULTILINE,
-)
+from ._findings import Finding
 
 
 def check_changelog(root: Path) -> list[Finding]:
@@ -31,7 +26,12 @@ def check_changelog(root: Path) -> list[Finding]:
         text = path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
         return [Finding("Finding", "CHANGELOG.md", "encoding-error", str(exc))]
-    if not _CHANGELOG_HEADER_RE.search(text):
+    # A released entry (`## X.Y.Z - YYYY-MM-DD`) or the honest `## [Unreleased]` header a
+    # freshly-scaffolded changelog carries before its first release.
+    if not any(
+        h.title == UNRELEASED_TITLE or RELEASE_TITLE_RE.fullmatch(h.title)
+        for h in _markdown.parse(text).headings(2)
+    ):
         return [
             Finding(
                 "Finding",

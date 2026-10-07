@@ -21,18 +21,15 @@ from types import ModuleType
 from typing import Any
 
 from lib import SCRIPTS, load_file
-from lib.lexicon import _nodes
+from lib.lexicon._corpora import Lexicon, LexiconError
 from lib.lexicon._nodes import (
-    CANON_ENV,
-    FLAG_DIR,
     SKIP_DIRS,
-    LexiconError,
     VocabularyError,
-    pages,
     param_fields,
 )
+from lib.shared import _frontmatter
 from lib.shared._files import repo_files
-from lib.shared._root import package_dir, packages, same_repository
+from lib.shared._root import not_present, package_dir
 
 
 def verb_gap(verb: str, offered: set[str] | None, reachable: set[str]) -> str | None:
@@ -238,153 +235,98 @@ class Node:
     position: tuple[str, ...] = ()
 
 
-def find_canon(root: Path, explicit: Path | None = None) -> Path | None:
-    """The racecar checkout carrying the flag tree, or None when there is none.
-
-    An explicit `--canon` that carries no tree is an error rather than a fallback: a
-    caller who names a directory is asserting the canon is there, and quietly checking
-    something else is how a run reports OK about a tree it never read.
-
-    A canon that is ANOTHER CHECKOUT OF THIS REPOSITORY resolves to `root` itself. A git
-    worktree is the case that makes this necessary: `RACECAR_ROOT` names the main
-    checkout, so canon and root are two paths holding two versions of one tree, and
-    comparing them by path would make the branch an adopter extending racecar: every
-    node read twice, and a branch that EDITS the vocabulary told its node `contradicts
-    canon ... take the disagreement to racecar` -- advice with nowhere to go, since the
-    branch is racecar's. Canon is the tree under test there, not the copy the other
-    checkout happens to be holding.
-    """
-    if explicit is not None:
-        resolved = explicit.resolve()
-        if not (resolved / FLAG_DIR).is_dir():
-            raise VocabularyError(f"--canon {resolved} carries no {FLAG_DIR}")
-        return root.resolve() if same_repository(resolved, root) else resolved
-    environment = os.environ.get(CANON_ENV, "").strip()
-    for candidate in (
-        Path(environment) if environment else None,
-        _nodes.SKILL_LINK,
-        root,
-    ):
-        if candidate is not None and (candidate / FLAG_DIR).is_dir():
-            if same_repository(candidate, root):
-                return root.resolve()
-            return candidate.resolve()
-    return None
-
-
-_NODES_CACHE: dict[tuple[Path, Path], list[tuple[Path, dict[str, str]]]] = {}
-
-
-def nodes(base: Path, subdir: Path) -> list[tuple[Path, dict[str, str]]]:
-    """Every term node under `base/subdir` with its frontmatter, index excluded.
-
-    Empty when the tree is absent, which is what most repos look like. A README at any
-    depth is an index, not a term. The noun tree nests — the three chain layers live
-    under `repo/` because they are kinds of repo — so this walks the subtree.
-
-    Memoization (Michie, 1968), cached by `(base, subdir)`: one run reads the same pair
-    from `main()`, `flag_nodes()`, and `check_index()`'s own two call sites (the
-    emptiness guard, then again inside `index_body()`). NOT invalidated on a plain
-    re-read, only on a write: `check_index(..., write=True)` regenerates a tree's
-    README, and the write path drops that `(root, subdir)`'s cache entry
-    (`_NODES_CACHE.pop`, below) rather than trusting that today's write target
-    (README.md, which this function already excludes) can never overlap what `nodes()`
-    returns -- a blind cache with no invalidation path at all would be one future change
-    to what `--write` touches away from serving a second `check_index()` call in the
-    same process its pre-write answer.
-    """
-    key = (base, subdir)
-    if key in _NODES_CACHE:
-        return _NODES_CACHE[key]
-    directory = base / subdir
-    if not directory.is_dir():
-        result: list[tuple[Path, dict[str, str]]] = []
-    else:
-        result = [
-            (path, meta) for path, meta in pages(directory) if path.name != "README.md"
-        ]
-    _NODES_CACHE[key] = result
-    return result
-
-
 def _fields(meta: dict[str, Any]) -> dict[str, Any]:
     """`param_fields`, shaped for a frozen `Node`."""
     fields = param_fields(meta)
     return {**fields, "position": tuple(fields["position"])}
 
 
-def flag_nodes(root: Path, canon: Path | None) -> list[Node]:
-    """Canon's flag nodes, then this repo's own — canon first, so it reads as the rule.
+def flag_nodes(lexicon: Lexicon) -> list[Node]:
+    """Every param node of the union, in precedence order, each marked canon or not.
 
-    Canon is the racecar checkout, when one is found, and the delivered corpus's `param/`
-    pages, which racecar owns in every repo: so a word racecar delivers is defined in a
-    repo with no racecar checkout.
-
-    In racecar itself the two are one REPOSITORY and each node appears once, as canon: a
-    repo listed as both its own canon and its own extension would be checked twice and
-    could contradict itself, which is not a state a single tree can be in.
-
-    Same repository, not same path. A git worktree of racecar is a second checkout of
-    the one repository at a different directory, and a path comparison would call it an
-    adopter extending canon — so a branch that EDITS the vocabulary would be told its
-    node `contradicts canon ... take the disagreement to racecar`, from inside racecar,
-    and every node would be counted twice.
+    Each node appears once, under its real path: the repo's own `param/` nodes, then an
+    explicit `--canon`'s, then the delivered copy's. A node is canon when racecar wrote it,
+    or a caller named its home as canon (`Lexicon.is_canon`). A word in two homes is
+    returned twice, the local node and the canon one, because the flag check grades the
+    first against the second.
     """
     found: list[Node] = []
-    if canon is not None:
-        found += [
+    for entry in lexicon.nodes(under="param"):
+        if entry.filename == "README.md":
+            continue
+        meta = _frontmatter.load(lexicon.path(entry))
+        found.append(
             Node(
-                where=(
-                    str(path.relative_to(canon))
-                    if canon == root
-                    else f"{path.relative_to(canon).as_posix()} (canon)"
-                ),
+                where=f"{entry.directory}/{entry.filename}",
                 name=meta.get("name", ""),
                 kind=meta.get("type", ""),
-                canon=True,
+                canon=lexicon.is_canon(entry),
                 **_fields(meta),
             )
-            for path, meta in nodes(canon, FLAG_DIR)
-        ]
-    delivered = _nodes.delivered_corpus(root / _nodes.CORPUS_REL)
-    if delivered is not None:
-        found += [
-            Node(
-                where=str(path.relative_to(root)),
-                name=meta.get("name", ""),
-                kind=meta.get("type", ""),
-                canon=True,
-                **_fields(meta),
-            )
-            for path, meta in nodes(delivered, Path("param"))
-        ]
-    if canon != root:
-        found += [
-            Node(
-                where=str(path.relative_to(root)),
-                name=meta.get("name", ""),
-                kind=meta.get("type", ""),
-                canon=False,
-                **_fields(meta),
-            )
-            for path, meta in nodes(root, FLAG_DIR)
-        ]
+        )
     return found
+
+
+def flag_clashes(lexicon: Lexicon) -> list[tuple[str, str]]:
+    """`(where, what)` for each param node that disagrees on its type with another node for
+    the same word.
+
+    The union holds both, each under its own directory, and the graph keeps the first of
+    each side by precedence. Keeping one is not a reason to stay silent about what the other
+    said: two homes giving one word two meanings is a fact a reader needs. Two cases:
+
+    - **the same side** (both canon, or both the repo's own): the second disagrees with the
+      first, which is the one in force;
+    - **the repo's own against canon**: a local node may extend the vocabulary and may not
+      redefine it, though it may NARROW it (`_NARROWS`) -- an `enum` where canon says
+      `string` is stricter, not false.
+
+    Reported, never a stop: racecar flags, and a run fails on these only under `--strict`.
+    """
+    first: dict[tuple[bool, str], Node] = {}
+    out: list[tuple[str, str]] = []
+    nodes = flag_nodes(lexicon)
+    for node in nodes:
+        seen = first.setdefault((node.canon, Path(node.where).stem), node)
+        if seen is not node and seen.kind != node.kind:
+            out.append(
+                (
+                    node.where,
+                    f"says `type: {node.kind}` and {seen.where} says `type: {seen.kind}`: "
+                    "one word, two meanings. The first is the one in force.",
+                )
+            )
+    for node in nodes:
+        fixed = first.get((True, Path(node.where).stem))
+        if node.canon or fixed is None or fixed.kind == node.kind:
+            continue
+        if fixed.kind in _NARROWS.get(node.kind, set()):
+            continue
+        out.append(
+            (
+                node.where,
+                f"`type: {node.kind}` contradicts canon, which declares `{fixed.kind}` in "
+                f"{fixed.where}. A local node may extend the vocabulary and may not "
+                "redefine it — take the disagreement to racecar rather than overriding it "
+                "here.",
+            )
+        )
+    return out
 
 
 def has_cli(root: Path) -> bool:
     """Whether this repo has a CLI the audit can walk: a `__main__.py` in a package (§3).
 
-    The audit walks a package under `src/`, so a `__main__.py` anywhere else is not one it
-    can read. Counting it sent a repo with no package to an audit of `.`, which fails on an
-    import error that says nothing about vocabulary. The `__main__.py` files racecar
-    delivers under `.racecar/templates/` were enough to do that. A repo with no CLI
-    truthfully declares no flags, so there is nothing to audit.
+    The audit walks the repo's one package (`package_dir`), so a `__main__.py` anywhere else
+    is not one it can read. Counting it sent a repo with no package to an audit of `.`, which
+    fails on an import error that says nothing about vocabulary. The `__main__.py` files
+    racecar delivers under `.racecar/templates/` were enough to do that. A repo with no
+    package, or a package with no CLI, truthfully declares no flags: nothing to audit.
     """
-    return any(
+    package = package_dir(root)
+    return package is not None and any(
         not (set(path.relative_to(root).parts) & SKIP_DIRS)
-        for pkg in packages(root)
-        for path in repo_files(pkg, "__main__.py")
+        for path in repo_files(package, "__main__.py")
     )
 
 
@@ -406,11 +348,11 @@ def _flat_args(group: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 @contextlib.contextmanager
-def audited(root: Path, package: Path | None) -> Iterator[None]:
+def audited(root: Path, package: Path) -> Iterator[None]:
     """Run one in-process CLI audit of `root` and leave the interpreter as it was.
 
-    `package` is the package directory to audit, or None for a repo audited by walking
-    `src`/`.` rather than by name.
+    `package` is the package directory to audit, walked by its name. There is no
+    package-less form: a repo with no package has nothing to audit (`cli_tree` says so).
 
     Three globals move under an audit and all three are put back:
 
@@ -439,19 +381,13 @@ def audited(root: Path, package: Path | None) -> Iterator[None]:
     because importing the audited repo's modules would otherwise leave `__pycache__/`
     inside it, and reading a repo is not a licence to write into it.
     """
-    entry: str
-    top: str | None
-    if package is not None:
-        entry, top = str(package.parent), package.name
-    else:
-        entry = str(root)
-        top = "src" if (root / "src").is_dir() else None
+    entry, top = str(package.parent), package.name
     previous = Path.cwd()
     added = entry if entry not in sys.path else None
     # A copy of the package this process imported from somewhere ELSE -- an installed
     # racecar, another checkout -- would be read in place of this tree's, so it steps
     # aside for the audit and comes back after. A copy from this tree stays live.
-    foreign = _foreign_copies(package) if package is not None else {}
+    foreign = _foreign_copies(package)
     for name in foreign:
         del sys.modules[name]
     before = set(sys.modules)
@@ -469,7 +405,7 @@ def audited(root: Path, package: Path | None) -> Iterator[None]:
             with contextlib.suppress(ValueError):
                 sys.path.remove(added)
         for name in [
-            m for m in sys.modules if top and m.split(".")[0] == top and m not in before
+            m for m in sys.modules if m.split(".")[0] == top and m not in before
         ]:
             sys.modules.pop(name, None)
         sys.modules.update(foreign)
@@ -564,13 +500,15 @@ def cli_tree(root: Path) -> dict[str, Any]:
     Closed by default (R-10): a tree with any node the audit could not import is a refusal,
     never a partial answer. The same refusal `derive` makes.
     """
-    audit = _audit_module(root)
     pkg = package_dir(root)
+    if pkg is None:
+        # The audit reads the package's CLI. With no package it has no subject, and walking
+        # `src/` or `.` instead is the namespace walk this function exists to prevent.
+        raise LexiconError(f"the CLI audit did not run: {not_present(root)}")
+    audit = _audit_module(root)
     try:
         with audited(root, pkg), contextlib.redirect_stdout(sys.stderr):
-            tree: dict[str, Any] = audit.audit_cli_tree(
-                "." if pkg is None else pkg.name
-            )
+            tree: dict[str, Any] = audit.audit_cli_tree(pkg.name)
     # The audit imports the repo's own code; a failure there, including a module that
     # calls `sys.exit` as it is imported, is data, not the end of this command. What the
     # imported modules print goes to stderr, so a `--json` command's stdout stays one

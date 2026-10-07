@@ -41,7 +41,10 @@ SCRIPTS = Path(__file__).resolve().parents[2]
 #: The cli templates, beside the scripts they serve: racecar's `templates/cli/`,
 #: delivered to an adopter as `.racecar/templates/cli/`.
 TEMPLATE = SCRIPTS.parent / "templates" / "cli"
-TERMS = Path("docs") / "lexicon"
+#: The error packet's modules, copied into a package's `lib/error/` byte for byte. They live
+#: in `scripts/lib/shared/error/`, delivered to every adopter, not in the cli template: code
+#: every adopter receives lives in `scripts/`, and a template copy would be a second home.
+ERROR_SOURCE = SCRIPTS / "lib" / "shared" / "error"
 # The vocabulary is param/surface.md's six (SURFACES.md §15); BUILT is what this noun builds.
 # A face in the first and not the second is reported, never refused.
 SURFACES = ("api", "bin", "cli", "mcp", "rest", "web")
@@ -261,9 +264,10 @@ class Noun:
 
 def noun_of(root: Path, package: str, noun: str) -> Noun:
     """The `Noun` a lexicon noun names: the root flavour when it is the corpus's root noun."""
-    terms = root / TERMS
-    is_root = (terms / "README.md").is_file() and noun == _lexicon(root).root_noun(
-        terms
+    lexicon = _lexicon(root)
+    corpora = lexicon.lexicon_corpora(root)
+    is_root = corpora.at("README.md", "own") is not None and noun == lexicon.root_noun(
+        corpora
     )
     return Noun(root, package, noun, is_root=is_root)
 
@@ -389,6 +393,15 @@ _PACKAGE_FILES: dict[str, tuple[str, ...]] = {
     "schema.py": ("returns", "conforms"),
     "lib/cli.py": ("NounParser", "VerbParser", "parse_args", "print_commands", "run"),
     "lib/renderer/json.py": ("add_flag", "print_json", "show"),
+    "lib/error/__init__.py": (),
+    "lib/error/_schema.py": ("SCHEMA",),
+    "lib/error/_packet.py": ("ErrorPacket", "packet"),
+}
+#: The package files that are not rendered from the cli template, and where each comes from.
+#: `_copy.py`, the stale-copy check, is not here: the program never uses it.
+_PACKAGE_SOURCES: dict[str, Path] = {
+    f"lib/error/{name}": ERROR_SOURCE / name
+    for name in ("__init__.py", "_schema.py", "_packet.py")
 }
 _PACKAGE_TESTS: dict[str, tuple[str, ...]] = {
     "conftest.py": ("_run_cli",),
@@ -410,6 +423,27 @@ _NOUN_FILES: dict[str, tuple[str, ...]] = {
     "lib/renderer/__init__.py": (),
     "lib/renderer/plaintext.py": ("error",),
 }
+
+
+def package_source(rel: str) -> Path:
+    """The file a package's `rel` is written from: the cli template, or `lib/shared/error/`."""
+    return _PACKAGE_SOURCES.get(rel, TEMPLATE / "package" / rel)
+
+
+def copy_error_package(pkg: Path) -> list[Path]:
+    """Write each `lib/error/` module `pkg` lacks, byte for byte; never overwrite one.
+
+    Returns the paths written. The modules carry no placeholder, so a copy is the file.
+    """
+    written = []
+    for rel, source in _PACKAGE_SOURCES.items():
+        dest = pkg / rel
+        if dest.exists():
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(source.read_bytes())
+        written.append(dest)
+    return written
 
 
 class Break(NamedTuple):

@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from check_docs import ignore_patterns
-from lib.shared import _frontmatter
+from lib.shared import _frontmatter, _markdown
 from lib.shared._agent_docs import AGENT_DOC_NAMES
 from lib.shared._files import is_hidden_path, repo_files
 from lib.shared._root import find_repo_root
@@ -87,8 +87,17 @@ def _ignore_for(root: Path) -> tuple[re.Pattern[str], ...]:
     return _PATTERNS_BY_ROOT[root]
 
 
-ACCESSED_VIA = re.compile(r"Accessed via \[[^\]]*\]\(([^)]+)\)")
 _UNVISITED, _ACTIVE, _DONE = 0, 1, 2
+
+
+def accessed_via(text: str) -> str | None:
+    """The target of the doc's first `Accessed via [X](target)` link, or None."""
+    doc = _markdown.parse(text)
+    lines = {line.no: line.text for line in doc.text()}
+    for link in doc.links():
+        if f"Accessed via [{link.text}](" in lines[link.no]:
+            return link.target
+    return None
 
 
 def in_scope(path: Path, root: Path) -> bool:
@@ -209,12 +218,12 @@ def main() -> int:
             if target is None or not (root / target).is_file():
                 findings.append(f"{rel}: see_also target does not exist: {ref}")
 
-        via = ACCESSED_VIA.search(text)
-        if via:
-            declared = resolve(doc, via.group(1), root)
+        via = accessed_via(text)
+        if via is not None:
+            declared = resolve(doc, via, root)
             if declared is not None and declared not in resolved:
                 findings.append(
-                    f"{rel}: 'Accessed via' points at {via.group(1)} "
+                    f"{rel}: 'Accessed via' points at {via} "
                     f"but it is not in pnode {pnode}"
                 )
 

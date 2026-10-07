@@ -4,7 +4,7 @@ follows, orthogonal to its ontology (the type system). See `TOPOLOGY.md`.
 **THIS IS THE IMPLEMENTATION, AND IT IS DELIVERED**, as `lib/topology/` beside
 `scripts/topology.py`, the command line over it. It lands in an adopter's
 `.racecar/scripts/` and runs there with no racecar installed, so it imports only what is
-delivered with it -- `lib.lexicon._nodes.corpora` for the corpus join and
+delivered with it -- `lib.lexicon._corpora.home_directories` for the corpus join and
 `lib.shared._root` for the repo root. `racecar.graph.topology.lib._verbs` is a
 wrapper that delegates here; the dependency runs library-wraps-delivered, never the reverse.
 
@@ -78,7 +78,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 import yaml
-from lib.lexicon._nodes import corpora
+from lib.lexicon._corpora import home_directories
 from lib.shared import _frontmatter
 from lib.shared._root import find_repo_root
 
@@ -224,12 +224,7 @@ def _topology_sources(meta: Path) -> list[Path]:
     ) or any(_is_tier_node(p) for p in meta.glob("*.md"))
     if declares_its_own:
         return [meta]
-    found = [
-        candidate
-        for candidate in (corpus / TOPOLOGY_DIRNAME for corpus in corpora(meta.parent))
-        if candidate.is_dir()
-    ]
-    return found or [meta]
+    return home_directories(meta)
 
 
 def _tiers_from_nodes(meta: Path) -> list[Any]:

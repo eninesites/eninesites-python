@@ -111,9 +111,12 @@ def narrow(fresh: list[Graph], existing: str, name: str) -> list[Graph]:
     A row the block does not yet carry has nothing to preserve, so it is taken fresh. That
     is not a special case: "what the README already claims" is empty for it.
     """
+    # Only the graphs block's own table: another table elsewhere in the README whose first
+    # cell happens to name a graph is not a claim about that graph.
+    block = existing.partition(GRAPHS_BEGIN)[2].partition(GRAPHS_END)[0]
     claimed = {
         line.split("|")[1].strip(): line
-        for line in existing.splitlines()
+        for line in block.splitlines()
         if line.startswith("| ") and line.count("|") >= 6
     }
     kept: list[Graph] = []

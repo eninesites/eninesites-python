@@ -30,6 +30,7 @@ from lib.ontology._kinds import (
     ontology_shadowed,
     relation_findings,
 )
+from lib.shared import _markdown
 from lib.shared._as_json import run_json
 from lib.shared._root import find_repo_root
 from lib.topology._walk import load, structural_findings
@@ -93,6 +94,23 @@ def _ontology_findings(
     return findings
 
 
+def _is_stub(doc: _markdown.Document) -> bool:
+    """Whether a principle's README says nothing past its title: empty, or `## Notes` + TODO."""
+    title = doc.headings(1)
+    words: list[str] = []
+    for line in doc.body():
+        if not line.text.strip() or (title and line.no == title[0].no):
+            continue
+        heading = doc.heading_at(line.no)
+        words += ["<h2>"] if heading is not None and heading.level == 2 else []
+        words += (heading.title if heading is not None else line.text).split()
+    return not words or [w.lower().rstrip(".") for w in words] == [
+        "<h2>",
+        "notes",
+        "todo",
+    ]
+
+
 def _principles_findings(tax: pathlib.Path) -> list[str]:
     """A STATED PRINCIPLE MUST BE DESCRIBED, and a described one must be stated.
 
@@ -119,7 +137,11 @@ def _principles_findings(tax: pathlib.Path) -> list[str]:
     principles_md = tax / "PRINCIPLES.md"
     if not principles_md.is_file():
         return errors
-    stated = set(re.findall(r"^### ([PR]-\d\d)\.", principles_md.read_text(), re.M))
+    stated = {
+        m.group(1)
+        for heading in _markdown.read(principles_md).headings(3)
+        if (m := re.match(r"([PR]-\d\d)\.", heading.title))
+    }
     for pid in sorted(set(by_id) - stated):
         errors.append(
             f"{by_id[pid]}: has a directory but no `### {pid}.` entry in PRINCIPLES.md"
@@ -131,13 +153,10 @@ def _principles_findings(tax: pathlib.Path) -> list[str]:
         )
     for pid in sorted(set(by_id) & stated):
         name = by_id[pid]
-        written = (tax / name / "README.md").read_text()
-        body = re.sub(r"\A---\n.*?\n---\n+", "", written, flags=re.S)
-        body = re.sub(r"\A#\s+.+?\n+", "", body).strip()
         # A stub is a bare `## Notes` and a TODO. The floor is deliberately low -- this
-        # gate is here to catch an EMPTY root, not to grade prose, which is not a
+        # check is here to catch an EMPTY root, not to grade prose, which is not a
         # checker's business (R-03).
-        if not body or re.fullmatch(r"##\s*Notes\s*TODO\.?", body, re.S | re.I):
+        if _is_stub(_markdown.read(tax / name / "README.md")):
             errors.append(f"{name}: stated but not described — README.md is a stub")
     return errors
 

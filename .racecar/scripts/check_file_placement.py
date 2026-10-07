@@ -17,7 +17,7 @@ Two edge kinds count, because a repo has two ways to declare where a doc hangs:
   - a `pnode` frontmatter edge (DOC_GRAPH.md) from a reachable parent to this doc.
     The parse is `check_doc_graph.graph_edges`, so the edge has one definition.
 
-The second is what a `docs/` tree normally uses: a generated page (a verb page)
+The second is what a `docs/` tree normally uses: a generated file (a verb node)
 declares its parent rather than waiting for a hand-written link, and a hand-written
 `docs/ARCHITECTURE.md` declares `pnode: [../README.md]`. Either way the rule is the
 same everywhere in the repo — every doc resolves back to the root README, directly
@@ -46,12 +46,12 @@ Complexity: O(V+E), V=repo markdown files, E=md-link+pnode edges (multi-source D
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
 from check_doc_graph import graph_edges
 from check_docs import ignore_patterns
+from lib.shared import _markdown
 from lib.shared._agent_docs import AGENT_DOC_NAMES
 from lib.shared._files import is_hidden_path, repo_files
 from lib.shared._root import find_repo_root
@@ -74,7 +74,6 @@ SEED_ANYWHERE = "SKILL.md"
 EXEMPT_PREFIXES = (Path("docs/summary"),)
 
 # Inline markdown link target: the `(path)` of `[text](path)`.
-_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 REPO_ROOT = find_repo_root()
 
 # Same ignore-paths check_docs honors, so one declaration scopes out a data/ tree.
@@ -108,8 +107,8 @@ def _markdown_files() -> list[Path]:
 def _md_link_targets(md_path: Path, text: str) -> set[Path]:
     """Repo-relative paths of the .md files this doc links to (anchors stripped)."""
     targets: set[Path] = set()
-    for match in _LINK_RE.finditer(text):
-        parts = match.group(1).strip().split()  # drop any "(path \"title\")"
+    for link in _markdown.parse(text).links():
+        parts = link.target.split()  # drop any "(path \"title\")"
         if not parts:  # `[text]( )` — empty target; check_docs reports it
             continue
         raw = parts[0]

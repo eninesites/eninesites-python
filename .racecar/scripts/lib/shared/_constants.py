@@ -121,6 +121,12 @@ SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$")
 # changelog heading and a brief stamp carry.
 RELEASE_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
+# The title of a CHANGELOG release heading, `X.Y.Z - YYYY-MM-DD` (a prerelease or build tag
+# allowed), and of the section a release folds in. Matched against a heading's title as the
+# markdown reader gives it (`_markdown.Document.headings(2)`), never against a raw line.
+RELEASE_TITLE_RE = re.compile(r"(\d+\.\d+\.\d+(?:[-+][\w.-]+)?) - (\d{4}-\d{2}-\d{2})")
+UNRELEASED_TITLE = "[Unreleased]"
+
 # Where racecar's files land in an adopter, and what sync writes there to record it.
 #
 # VERBATIM from `racecar.lib.delivery.record`, which is the authored home. A delivered
@@ -142,7 +148,6 @@ DELIVERED_RECORD_REL = ".racecar-delivered.txt"
 DELIVERY_ROOT = ".racecar"
 LEXICON_STAMP_REL = ".racecar-lexicon"
 SCRIPTS_STAMP_REL = ".racecar-scripts"
-CORPUS_REL = "docs/lexicon"
 LEGACY_DELIVERY_DIRS = ("rc_scripts", "scripts")
 LEGACY_DELIVERY_DIR = LEGACY_DELIVERY_DIRS[0]
 LEGACY_DELIVERED_REL = "racecar-manifest.txt"

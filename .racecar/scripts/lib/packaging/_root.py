@@ -145,6 +145,35 @@ def flat_package(root: Path) -> Path | None:
     return package if (package / "__init__.py").is_file() else None
 
 
+def has_library(root: Path) -> bool:
+    """Whether `root` carries a library: a `src/`, or the package `[project].name` names at
+    the root (the `flat` shape). The PYTHON_LIBRARY axis of the shape, stated once.
+    """
+    return (root / "src").is_dir() or flat_package(root) is not None
+
+
+def server_root(root: Path) -> Path | None:
+    """Where `root` keeps its Django project, or None when it has none.
+
+    `server/` when `server/manage.py` exists (racecar's server shell, beside a library or
+    alone); else the repo root, when a root `manage.py` exists and there is no library (a
+    startproject site, the `django` shape); else None. A root `manage.py` beside a library
+    does not count: a library's Django belongs under `server/`.
+
+    The one Python statement of the DJANGO_PROJECT axis's location, as `package_root` is of
+    the library's. The two axes are independent: a repo has either, both or neither.
+    `racecar.mk` decides the same thing again in Make (`_SERVER_MNG`, `_ROOT_MNG`), on purpose,
+    so the build needs nothing but `make`; a coherence test holds the two in step. Where the
+    generator WRITES a server (`server/`, always) is a different question, answered by the
+    generator.
+    """
+    if (root / "server" / "manage.py").exists():
+        return root / "server"
+    if (root / "manage.py").is_file() and not has_library(root):
+        return root
+    return None
+
+
 def packages(root: Path) -> list[Path]:
     """Every directory under the package root that holds an `__init__.py`, sorted by name.
 
@@ -180,3 +209,19 @@ def package_dir(root: Path) -> Path | None:
         return None
     named = [p for p in found if p.name == module_name(name)]
     return named[0] if named else None
+
+
+def not_present(root: Path) -> str:
+    """Why a check does not apply to `root`, in the owner's three cases, worded once.
+
+    A package and no Django project: a Django check says "No django server to check". A
+    Django project and no package: a package check says "No package to check". Neither:
+    "Nothing to check". Every checker that skips for want of its subject says one of these,
+    so the same repo is described the same way everywhere.
+    """
+    package, server = package_dir(root) is not None, server_root(root) is not None
+    if package and not server:
+        return "No django server to check"
+    if server and not package:
+        return "No package to check"
+    return "Nothing to check"

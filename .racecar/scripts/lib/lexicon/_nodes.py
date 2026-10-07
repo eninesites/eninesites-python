@@ -9,14 +9,20 @@ Complexity: O(N), N = nodes read (one frontmatter parse each, memoized per path)
 
 from __future__ import annotations
 
-import hashlib
 import os
-import re
-import sys
 from pathlib import Path
 from typing import Any
 
-from lib.shared import _constants, _frontmatter
+from lib.lexicon._corpora import (
+    DELIVERED,
+    OWN,
+    Corpus,
+    Entry,
+    Lexicon,
+    LexiconError,
+    lexicon_corpora,
+)
+from lib.shared import _frontmatter, _markdown
 from lib.shared._root import find_repo_root
 
 # The three exit codes, beside the error they sit next to. They live with the CHECKS rather
@@ -25,326 +31,55 @@ from lib.shared._root import find_repo_root
 OK, FINDINGS, UNMET = 0, 1, 2
 
 
-class LexiconError(Exception):
-    """The lexicon cannot be graded at all — a broken run, not a finding."""
-
-
 # Three names for one error: all three mean the same thing.
 NounspaceError = VocabularyError = NomenclatureError = LexiconError
 
-DEFAULT_TERMS = Path("docs") / "lexicon"
-
-# The two corpora that JOIN, in resolution order. `docs/lexicon` is the repo's own words;
-# `.racecar/docs/lexicon` is the half racecar DELIVERS, at the same relative position in
-# every governed repo. Each is ignored when it is not on disk.
-#
-# Hardcoded rather than declared because there is nothing for a declaration to decide --
-# every governed repo has these two or fewer -- and because a repo that had to declare the
-# delivered tree before it was read would spend the whole window between the sync and the
-# edit reporting every node of a delivered kind as declaring a kind nothing defines.
-# Anything BEYOND the pair is declared, at `[tool.racecar.lexicon] corpora` in
-# pyproject.toml, which is where a project's own bindings already live.
-CORPUS_REL = Path("docs") / "lexicon"
-
-# The provenance stamps racecar writes at the boundary root: git's own tree object id for
-# each tree it delivered, ONE PER TREE. Not one umbrella sha over `.racecar/` -- the two
-# halves are delivered by different rules and answer different questions, and a single
-# number could only ever say "something under here changed", which names nothing and is
-# repaired by nothing.
-#
-# What they buy is ONE question per tree: are these still the bytes racecar shipped? A
-# delivered kind node is read as DATA, and a `required:` list edited by hand in the
-# delivered half changes what every gate in the repo demands while still looking like canon.
-# A delivered CHECKER is worse -- it IS the gate. The stamps do not prevent either; nothing
-# in a repo can. They make the tree say so.
-#
-# Absent stamp means trust it: a tree delivered without a stamp, or placed by hand, is
-# not evidence of tampering. A stamp that DISAGREES is, and the lexicon's disagreement
-# drops the delivered corpus from the join -- ignored, not an error, because a mangled
-# delivery is the author's own doing and it must not take the repo's own lexicon down with
-# it.
-#
-# Read from `lib.shared._constants`, which is the DELIVERED mirror of
-# `racecar.lib.delivery.record` -- the side that writes them. This file cannot import the
-# library and does not need to: the mirror sits beside it in the same delivered directory,
-# and `find_repo_root` already comes from there.
-DELIVERY_ROOT = _constants.DELIVERY_ROOT
-LEXICON_STAMP_REL = _constants.LEXICON_STAMP_REL
-SCRIPTS_STAMP_REL = _constants.SCRIPTS_STAMP_REL
-
-# Paths already reported as mismatched, so a join that runs once per corpus root does not
-# print the same line ten times.
-_STAMP_REPORTED: set[str] = set()
+#: The repo's own entries only: what a reader of the repo's commands, nouns and domains keeps.
+OWN_ONLY = frozenset({OWN})
 
 ONTOLOGY_REL = Path("ontology") / "README.md"
 
 
-def _pyproject_of(terms: Path) -> Path | None:
-    """The nearest `pyproject.toml` at or above `terms`, or None.
-
-    Walked rather than taken from `find_repo_root`, because this must answer for a corpus
-    that is not in a git checkout at all -- a fixture, or a tree being scaffolded.
-    """
-    for parent in [terms.resolve(), *terms.resolve().parents]:
-        candidate = parent / "pyproject.toml"
-        if candidate.is_file():
-            return candidate
-    return None
-
-
-def _declared_corpora(terms: Path) -> list[Path]:
-    """The extra corpora `[tool.racecar.lexicon] corpora` names, as paths under the root
-    that declares them. Absent table, absent key and a non-list value all mean none.
-
-    Hand-parsed, not `tomllib`: this module is delivered into repos running Python
-    versions racecar does not pick, and the one value it wants is a list of strings under
-    a named table. A shape it cannot read yields no corpora, which is the same answer as
-    declaring none.
-    """
-    pyproject = _pyproject_of(terms)
-    if pyproject is None:
-        return []
-    root = pyproject.parent
-    out: list[Path] = []
-    in_table = False
-    for line in pyproject.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped.startswith("["):
-            in_table = stripped.rstrip() == "[tool.racecar.lexicon]"
-            continue
-        if not in_table or not stripped.startswith("corpora"):
-            continue
-        _, _, value = stripped.partition("=")
-        for item in re.findall(r"""["']([^"']+)["']""", value):
-            out.append(root / item.rstrip("/"))
-    return out
-
-
-def _is_corpus_root(terms: Path) -> bool:
-    """Whether `terms` is a corpus ROOT (`.../docs/lexicon`) rather than a node inside one.
-
-    The guard that keeps the join from firing on a directory that merely sits under a
-    corpus. `docs/lexicon/graph/` holds a CLI noun, and walking up from it would find the
-    delivered corpus and fold another repo's kinds into one noun's ontology -- an ontology
-    assembled out of position rather than out of a declaration.
-    """
-    return terms.name == CORPUS_REL.name and terms.parent.name == CORPUS_REL.parent.name
-
-
-def _blob_sha(path: Path) -> bytes:
-    """git's blob object id for one file, raw. `sha1("blob <len>\\0" + bytes)`."""
-    data = path.read_bytes()
-    return hashlib.sha1(b"blob %d\0" % len(data) + data, usedforsecurity=False).digest()
-
-
-def is_bytecode(name: str) -> bool:
-    """Whether `name` is something the interpreter writes beside a delivered module.
-
-    `__pycache__/` and `*.pyc` / `*.pyo`: what `templates/classic/gitignore` ignores, so what
-    git leaves out of the tree `tree_sha` has to agree with. The ONE statement of it, because
-    it has two readers that must agree: `tree_sha` leaves these out of the hash, and sync
-    deletes them from `.racecar/` before it runs. A delete that removed one set while the
-    hash skipped another would leave the stamp wrong for whatever fell between them.
-    """
-    return name == "__pycache__" or name.endswith((".pyc", ".pyo"))
-
-
-def tree_sha(root: Path) -> str:
-    """git's tree object id for a directory, computed without git and without writing.
-
-    **THE AUTHORED HOME.** `racecar.lib._corpora` wraps this rather than copying it, the
-    same direction `racecar.lexicon.lib._graph` states for the tuple list: a delivered file
-    cannot import the library, so the library imports the delivered file and there is one
-    implementation. Two spellings of a hash is how a stamp comes to disagree with itself on
-    a tree nobody touched -- an accusation of tampering that the tool itself manufactured.
-
-    The whole point of matching git's own algorithm rather than inventing a digest is that
-    the recorded value is reproducible by hand: `git rev-parse <ref>:.racecar/scripts` in the
-    repo that received it prints the same forty characters. A checksum of our own devising
-    would be a number only this code can explain.
-
-    Entries sort by name with a directory sorted as `name/` -- git's rule, and getting it
-    wrong yields a plausible sha that matches nothing. Mode is `100644` or `100755` off the
-    execute bit; symlinks and submodules cannot appear in a delivered corpus of markdown.
-
-    Bytecode is left out (`is_bytecode`), because git leaves it out. Running any delivered
-    checker writes `.racecar/scripts/lib/**/__pycache__/`, and hashing it would make
-    every later sync rewrite a stamp nothing changed, and write one that matches no
-    commit.
-    """
-    entries: list[tuple[bytes, bytes, bytes]] = []
-    for child in sorted(
-        (p for p in root.iterdir() if not is_bytecode(p.name)),
-        key=lambda p: p.name + ("/" if p.is_dir() else ""),
-    ):
-        if child.is_dir():
-            entries.append(
-                (b"40000", child.name.encode(), bytes.fromhex(tree_sha(child)))
-            )
-        else:
-            mode = b"100755" if child.stat().st_mode & 0o111 else b"100644"
-            entries.append((mode, child.name.encode(), _blob_sha(child)))
-    body = b"".join(mode + b" " + name + b"\0" + sha for mode, name, sha in entries)
-    return hashlib.sha1(
-        b"tree %d\0" % len(body) + body, usedforsecurity=False
-    ).hexdigest()
-
-
-def _delivered_is_intact(delivery_root: Path, corpus: Path) -> bool:
-    """Whether the delivered corpus still holds the bytes the stamp says racecar delivered.
-
-    True when there is no stamp, when it is empty, and when it agrees. False only when a
-    stamp exists and names a different tree -- and that False drops the delivered corpus
-    from the join rather than raising, with one line on stderr so the drop is not silent.
-    A silent skip is the shape of every checker that passes because it read nothing.
-    """
-    stamp = delivery_root / LEXICON_STAMP_REL
-    if not stamp.is_file():
-        return True
-    recorded = stamp.read_text(encoding="utf-8").split()
-    if not recorded or recorded[0] == tree_sha(corpus):
-        return True
-    key = str(corpus)
-    if key not in _STAMP_REPORTED:
-        _STAMP_REPORTED.add(key)
-        print(
-            f"lexicon: {corpus} does not match the tree {stamp} records "
-            f"({recorded[0][:12]}) -- the delivered corpus is edited, and it is left OUT "
-            "of the join. Re-run the sync to restore it.",
-            file=sys.stderr,
-        )
-    return False
-
-
-#: The delivered corpus has TWO positions, and they are the same corpus seen from each end of
-#: the delivery. `docs/rc_lexicon` is where it is AUTHORED, which is the position racecar
-#: itself has and no adopter does; `.racecar/docs/lexicon` is where it LANDS. Both are read
-#: here so racecar joins its own canon by POSITION, exactly as an adopter does, and therefore
-#: at the same precedence. Declaring it instead (`[tool.racecar.lexicon] corpora`) would
-#: put it on the CUSTOM leg, which outranks the repo's own corpus -- the opposite order
-#: from the one racecar ships.
-#:
-#: **AUTHORED FIRST, and that order is the whole of it.** A repo can hold both at once:
-#: syncing racecar into itself is allowed, and the manifest's document rows write
-#: `.racecar/docs/lexicon/` when it happens. Read received-first, the copy would shadow the
-#: file racecar authors -- editing `docs/rc_lexicon/ontology/verb.md` would then change
-#: nothing until the next sync, and the provenance stamp would agree because the bytes matched
-#: when it was written. Two homes for one fact with the drift invisible, which is the failure
-#: this repo exists to catch. Authored beats received, the same way a declared corpus beats
-#: the repo's own and the repo's own beats canon: the more specific statement wins.
-DELIVERED_RELS = (Path("docs") / "rc_lexicon", Path(DELIVERY_ROOT) / CORPUS_REL)
-
-
-def delivered_corpus(terms: Path) -> Path | None:
-    """The delivered corpus at either of its two positions, or None when neither is there.
-
-    Found by walking up from `terms` rather than computed from a repo root, for the same
-    reason `_pyproject_of` walks: this must answer for a corpus that is not in a git
-    checkout at all. The two corpora are not siblings, so the relationship is stated here
-    rather than spelled into every path that needs it.
-
-    A corpus whose provenance stamp disagrees with it is not returned at all -- it is dropped
-    from the join rather than trusted, and `_delivered_is_intact` says so on stderr.
-    """
-    for parent in [terms.resolve(), *terms.resolve().parents]:
-        for rel in DELIVERED_RELS:
-            candidate = parent / rel
-            if candidate.is_dir():
-                if not _delivered_is_intact(parent / DELIVERY_ROOT, candidate):
-                    return None
-                return candidate
-    return None
-
-
-def corpora(terms: Path) -> list[Path]:
-    """**Step one, and the one home for it.** The corpus roots that JOIN to make the corpus
-    `terms` names, in RESOLUTION ORDER. Every entry exists; an absent one is skipped, never
-    an error.
-
-    THE ORDER IS THE PRECEDENCE RULE, and everything downstream inherits it:
-
-        custom  >  the repo's own `docs/lexicon`  >  the delivered corpus
-
-    Custom first: a corpus a project went out of its way to declare at
-    `[tool.racecar.lexicon] corpora` is the most specific statement in the repo, and a
-    declaration that could be overruled by the thing it was written to override would be
-    pointless. The repo's own corpus next. Canon LAST, as the fallback — a delivered kind
-    supplies what nothing local says, and yields wherever something local does.
-
-    That means an adopter CAN narrow a delivered kind's `required:` and the narrower list
-    wins. It is a deliberate trade: `required:` composes with `base.required`, so a local
-    answer that wins can make a gate quieter than canon wrote it. The alternative — canon
-    first — makes canon unoverridable, and a repo that cannot disagree with a default has no
-    way to be right when the default is wrong for it. Both readers print which copy was
-    shadowed, so a quieter gate is visible rather than silent.
-
-    One home because the order of operations is the same for all three declarations: join the
-    sources, generate the ontology / topology / graph from the union, then operate on
-    that. The ontology's second step is
-    `ontology_paths` here and `lib.ontology._kinds._ontology_sources`; the topology's is
-    `lib.topology._walk._topology_sources`. The graph's data walk reads
-    one tree, and it will read this function rather than a second copy of it.
-
-    `_is_corpus_root` is what keeps this from firing on a directory that merely sits under a
-    corpus -- see its own note.
-    """
-    if not _is_corpus_root(terms) or not terms.is_dir():
-        return [terms]
-    delivered = delivered_corpus(terms)
-    ordered = [
-        *_declared_corpora(terms),
-        terms,
-        *([delivered] if delivered else []),
-    ]
-    out: list[Path] = []
-    seen: set[Path] = set()
-    for candidate in ordered:
-        if candidate.is_dir() and candidate.resolve() not in seen:
-            seen.add(candidate.resolve())
-            out.append(candidate)
-    return out
-
-
-def _own_ontology(terms: Path) -> Path:
-    """ONE corpus's own ontology declaration: the first `ontology:` entry that exists, or
-    the conventional location when it declares none."""
-    declared = _frontmatter.load(terms / "README.md").get("ontology") or []
+def _own_ontology(home: Corpus) -> Path:
+    """ONE home's own ontology declaration: the first `ontology:` entry of its root node that
+    exists, or the conventional location when it declares none."""
+    declared = _frontmatter.load(home.path / "README.md").get("ontology") or []
     for entry in declared if isinstance(declared, list) else [declared]:
-        # Normalized, not resolved: an entry may reach out of the corpus, and `terms /
+        # Normalized, not resolved: an entry may reach out of the home, and `home /
         # that` keeps the `..` in the middle of every path this hands to a FINDING.
         # Collapsing it is cosmetic for the filesystem and load-bearing for the reader;
         # `resolve()` would also make it absolute, which is not this function's to decide.
-        candidate = Path(os.path.normpath(terms / str(entry).rstrip("/")))
+        candidate = Path(os.path.normpath(home.path / str(entry).rstrip("/")))
         if candidate.is_dir():
             return candidate / "README.md"
         if candidate.is_file():
             return candidate
-    return terms / ONTOLOGY_REL
+    return home.path / ONTOLOGY_REL
 
 
-def ontology_paths(terms: Path) -> list[Path]:
-    """**Step two for the ontology.** One declaration per joined corpus (`corpora`), in
-    that order, skipping a corpus that has none -- or the conventional location when the
-    join yields nothing at all, so a caller always has a path to name in a finding.
+def ontology_paths(lexicon: Lexicon) -> list[Path]:
+    """**Step two for the ontology.** One declaration per home of the union, in precedence
+    order, skipping a home that has none -- or the repo's own conventional location when
+    no home has one, so a caller always has a path to name in a finding.
     """
-    found = [_own_ontology(corpus) for corpus in corpora(terms)]
-    return [path for path in found if path.is_file()] or [terms / ONTOLOGY_REL]
+    found = [_own_ontology(home) for home in lexicon.homes]
+    return [path for path in found if path.is_file()] or [lexicon.own / ONTOLOGY_REL]
 
 
-def ontology_path(terms: Path) -> Path:
+def ontology_path(lexicon: Lexicon) -> Path:
     """The corpus's OWN ontology, which is the first joined one.
 
     The first, not the only. Corpus-level statements -- `base`, `discriminator`,
     `partition` -- belong to the corpus and are read from here; the kinds are a union
     over `ontology_paths`.
     """
-    return ontology_paths(terms)[0]
+    return ontology_paths(lexicon)[0]
 
 
 API_NAMES = ("api.py", "api")
 
 
-def kind_of(path: Path, terms: Path) -> str:  # pylint: disable=unused-argument
+def kind_of(path: Path) -> str:
     """A node's kind, read from its own frontmatter. One statement, and the only one.
 
     Deliberately NOT the directory. An ontology exists so that one tree can hold things of many
@@ -358,18 +93,7 @@ def kind_of(path: Path, terms: Path) -> str:  # pylint: disable=unused-argument
     return str(_frontmatter.load(path).get("kind") or "")
 
 
-def pages(terms: Path) -> list[tuple[Path, dict[str, Any]]]:
-    """Every page under `terms`, in path order, each with its frontmatter.
-
-    The one walk of a lexicon tree. Every reader that needs the tree's pages takes this
-    list and filters it; none walks the tree itself.
-    """
-    if not terms.is_dir():
-        return []
-    return [(path, _frontmatter.load(path)) for path in sorted(terms.rglob("*.md"))]
-
-
-def term_nodes(terms: Path) -> dict[str, list[tuple[Path, dict[str, Any]]]]:
+def term_nodes(lexicon: Lexicon) -> dict[str, list[tuple[Path, dict[str, Any]]]]:
     """Every node that declares a kind, grouped by it. A node with no `kind:` is not a term.
 
     No filename or directory rule survives here: a README declaring `kind: noun` is a noun, a
@@ -377,10 +101,10 @@ def term_nodes(terms: Path) -> dict[str, list[tuple[Path, dict[str, Any]]]]:
     ontology is for.
     """
     out: dict[str, list[tuple[Path, dict[str, Any]]]] = {}
-    for path, meta in pages(terms):
-        kind = str(meta.get("kind") or "")
-        if kind:
-            out.setdefault(kind, []).append((path, meta))
+    for entry in lexicon.nodes(origins=OWN_ONLY):
+        if entry.kind:
+            path = lexicon.path(entry)
+            out.setdefault(entry.kind, []).append((path, _frontmatter.load(path)))
     return out
 
 
@@ -576,16 +300,16 @@ def _one_ontology_kinds(path: Path) -> dict[str, Any]:
     return dict(kinds) if isinstance(kinds, dict) else {}
 
 
-def declared_kinds(terms: Path) -> dict[str, Any]:
-    """The kinds the ontologies under `terms` declare -- the UNION over every tree its
+def declared_kinds(lexicon: Lexicon) -> dict[str, Any]:
+    """The kinds the ontologies of the union declare -- the UNION over every tree its
     index names, each read as its index's own `kinds:` block when it is a document and as
     the kind nodes beside that index when it is a graph.
 
-    A union over `corpora`: the repo's own tree and the one racecar delivers are two
+    A union over `lexicon_corpora`: the repo's own tree and the one racecar delivers are two
     halves of one kind system, and a reader that stopped at the first would report every
     node of a delivered kind as declaring a kind nothing defines.
 
-    **A kind declared in more than one corpus resolves to the first one**, and `corpora` is
+    **A kind declared in more than one corpus resolves to the first one**, and `lexicon_corpora` is
     what puts them in order: custom, then the repo's own, then the delivered corpus. The most
     specific declaration wins and canon is the fallback, so a repo CAN narrow a delivered
     kind -- `verb: {required: [params, handler]}` locally keeps asking for `handler` even
@@ -598,13 +322,13 @@ def declared_kinds(terms: Path) -> dict[str, Any]:
     about what a corpus declares. The join here is the union `load_ontology` also makes.
     """
     out: dict[str, Any] = {}
-    for path in ontology_paths(terms):
+    for path in ontology_paths(lexicon):
         for name, spec in _one_ontology_kinds(path).items():
             out.setdefault(name, spec)
     return out
 
 
-def shadowed_kinds(terms: Path) -> dict[str, Path]:
+def shadowed_kinds(lexicon: Lexicon) -> dict[str, Path]:
     """Every kind declared in more than one of the joined corpora, mapped to the
     declaration whose copy LOST.
 
@@ -615,7 +339,7 @@ def shadowed_kinds(terms: Path) -> dict[str, Path]:
     """
     seen: set[str] = set()
     out: dict[str, Path] = {}
-    for path in ontology_paths(terms):
+    for path in ontology_paths(lexicon):
         for name in _one_ontology_kinds(path):
             if name in seen:
                 out[name] = path
@@ -624,10 +348,7 @@ def shadowed_kinds(terms: Path) -> dict[str, Path]:
     return out
 
 
-NOUNSPACE_REL = Path(".")
-
-
-def declared_nouns(nounspace: Path) -> dict[tuple[str, ...], Path]:
+def declared_nouns(lexicon: Lexicon) -> dict[tuple[str, ...], Path]:
     """Every node declaring `kind: noun`, keyed by its chain, in every domain.
 
     The chain is the node's DIRECTORY path, which is the whole projection claim: the position
@@ -635,29 +356,23 @@ def declared_nouns(nounspace: Path) -> dict[tuple[str, ...], Path]:
     root package — `docs/lexicon/README.md` mirrors `python -m <pkg>`. Which of them a run
     acts on is `eligible_nouns`'s question, not this one's.
     """
-    found: dict[tuple[str, ...], Path] = {}
-    for node, meta in pages(nounspace):
-        if str(meta.get("kind") or "") != "noun":
-            continue
-        rel = node.parent.relative_to(nounspace)
-        found[() if rel == Path(".") else rel.parts] = node
-    return found
+    return {
+        entry.parts: lexicon.path(entry)
+        for entry in lexicon.nodes(origins=OWN_ONLY, kind="noun")
+    }
 
 
-def declared_verbs(nounspace: Path, chain: tuple[str, ...]) -> set[str]:
+def declared_verbs(lexicon: Lexicon, chain: tuple[str, ...]) -> set[str]:
     """The verbs a noun answers to: the `kind: verb` nodes sitting beside its README.
 
     An EMPTY SET satisfies every claim made about it, so a filter that matches no node
     leaves the half of the projection that asks "does the noun's api expose each
     declared verb?" silently asserting nothing.
     """
-    directory = nounspace.joinpath(*chain)
-    if not directory.is_dir():
-        return set()
     return {
-        node.stem
-        for node in sorted(directory.glob("*.md"))
-        if node.name != "README.md" and kind_of(node, nounspace) == "verb"
+        entry.stem
+        for entry in lexicon.nodes(origins=OWN_ONLY, kind="verb")
+        if entry.parts == chain and entry.filename != "README.md"
     }
 
 
@@ -677,18 +392,8 @@ def has_nounspace(root: Path) -> bool:
     adopter with no term tree is not failing the rule; the rule does not reach them, which
     is the same shape the Django and server guards already use.
     """
-    return bool(declared_kinds(root / DEFAULT_TERMS))
+    return bool(declared_kinds(lexicon_corpora(root)))
 
-
-FLAG_DIR = Path("docs") / "lexicon" / "param"
-
-NOUN_DIR = Path("docs") / "lexicon"
-
-CANON_ENV = "RACECAR_ROOT"
-
-#: The installed racecar skill: `skills/racecar` in `$CLAUDE_CONFIG_DIR`, else `~/.claude`.
-_CLAUDE_HOME = os.environ.get("CLAUDE_CONFIG_DIR") or str(Path.home() / ".claude")
-SKILL_LINK = Path(_CLAUDE_HOME) / "skills" / "racecar"
 
 SKIP_DIRS = {
     ".git",
@@ -697,14 +402,6 @@ SKIP_DIRS = {
     "__pycache__",
     ".collections",
 }
-
-NOUN_TREE = Path("docs") / "lexicon"
-
-FLAG_TREE = Path("docs") / "lexicon" / "param"
-
-# ONE tree. `FLAG_TREE` is a sub-path of `NOUN_TREE`, so listing both would read every
-# param node twice -- and, worse, read it the second time WITHOUT the `--` prefix below.
-TERM_TREES = (NOUN_TREE,)
 
 DOC_SUFFIXES = (".md",)
 
@@ -734,19 +431,12 @@ def find_root(start: Path | None = None) -> Path:
 DEFAULT_DOMAIN = "racecar"
 
 
-def noun_count(terms: Path) -> int:
-    """How many nouns this lexicon declares.
-
-    Counted over the whole tree rather than through `nodes()`, which excludes READMEs --
-    and a noun's node IS its README, so routing this through `nodes()` would count no
-    nouns.
-    """
-    if not terms.is_dir():
-        return 0
-    return sum(1 for _, meta in pages(terms) if meta.get("kind") == "noun")
+def noun_count(lexicon: Lexicon) -> int:
+    """How many nouns this repo's own lexicon declares."""
+    return len(lexicon.nodes(origins=OWN_ONLY, kind="noun"))
 
 
-def partition_field(terms: Path) -> str | None:
+def partition_field(lexicon: Lexicon) -> str | None:
     """The field this lexicon partitions on, or None when it declares none.
 
     Opt-in per corpus, exactly as the graph engine treats it. An adopter's lexicon that
@@ -754,7 +444,7 @@ def partition_field(terms: Path) -> str | None:
     node of a single-domain tree would be a field with one value everywhere, which says
     nothing.
     """
-    declared = _frontmatter.load(ontology_path(terms))
+    declared = _frontmatter.load(ontology_path(lexicon))
     value = declared.get("partition")
     return str(value) if value else None
 
@@ -767,18 +457,31 @@ def domains_of(node: Path) -> list[str]:
     return [str(d).strip() for d in raw] if isinstance(raw, list) else []
 
 
-def declared_domains(terms: Path) -> list[str]:
-    """Every domain any node claims, which is the set `--domain` is validated against."""
+def declared_domains(lexicon: Lexicon) -> list[str]:
+    """Every domain any of the repo's own nodes claims: the set `--domain` is validated
+    against."""
     seen: set[str] = set()
-    for node, _ in pages(terms):
-        seen.update(domains_of(node))
+    for entry in lexicon.nodes(origins=OWN_ONLY):
+        seen.update(domains_of(lexicon.path(entry)))
     return sorted(seen)
+
+
+def graded_here(node: Path, lexicon: Lexicon) -> bool:
+    """Whether this repo's checks grade `node`: every node except one racecar delivered.
+
+    The delivered copy (`.racecar/docs/lexicon`) is the one thing imported into the repo. It
+    is racecar's to fix, and racecar grades it where it writes it; graded here, a finding would
+    land on a file the next sync overwrites. Every other node is the repo's own file, whatever
+    its `domain:` says. racecar's own canon is authored in place, not delivered, so racecar
+    grades it.
+    """
+    entry = lexicon.entry_of(node)
+    return entry is None or entry.origin != DELIVERED
 
 
 def _sections(node: Path) -> set[str]:
     """The `## <name>` headings a node carries, lowercased."""
-    body = _frontmatter.split(node.read_text(encoding="utf-8"))[1]
-    return {m.group(1).strip().lower() for m in re.finditer(r"^##\s+(.+)$", body, re.M)}
+    return {h.title.strip().lower() for h in _markdown.read(node).headings(2)}
 
 
 def _has_prose(node: Path) -> bool:
@@ -791,26 +494,23 @@ def _has_prose(node: Path) -> bool:
     Emptiness cannot be gamed the way a field can. A node with a heading, a per-domain
     section header and nothing under either has not been written, whoever set its bearing.
     """
-    body = _frontmatter.split(node.read_text(encoding="utf-8"))[1]
-    for line in body.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        return True
-    return False
+    doc = _markdown.read(node)
+    return any(
+        line.text.strip() and doc.heading_at(line.no) is None for line in doc.body()
+    )
 
 
-def _is_command(node: Path, terms: Path) -> bool:
+def _is_command(entry: Entry, lexicon: Lexicon) -> bool:
     """A verb node is a COMMAND when it sits under a noun; under a kind bucket it is a meaning.
 
     `graph/check.md` is `racecar.graph check`. `verb/check.md` is what the word means where it
     cuts across nouns, and addresses nothing. The test is the neighbour, not the filename: a
     noun directory carries a `README.md` declaring `kind: noun`.
     """
-    parent = node.parent / "README.md"
-    if node.parent == terms:
+    if not entry.parts:
         return True
-    return parent.exists() and kind_of(parent, terms) == "noun"
+    parent = lexicon.at("/".join((*entry.parts, "README.md")), entry.origin)
+    return parent is not None and parent.kind == "noun"
 
 
 def _params_of(node: Path) -> list[str]:
@@ -818,18 +518,20 @@ def _params_of(node: Path) -> list[str]:
     return [str(p) for p in raw] if isinstance(raw, list) else []
 
 
-def _declared_name(terms: Path) -> str | None:
+def _declared_name(lexicon: Lexicon) -> str | None:
     """The `name:` a corpus's root node declares, or None when it declares none.
 
     One read, two callers. `root_noun` and `corpus_domain` both want this string and want
     different answers when it is absent, so the read is here and each states its own
     fallback.
     """
-    declared = _frontmatter.load(terms / "README.md").get("name")
+    # The repo's own root node, read where the repo's own home is, so a name `declare` has
+    # just written is the name read back.
+    declared = _frontmatter.load(lexicon.own / "README.md").get("name")
     return str(declared).strip('"') if declared else None
 
 
-def root_noun(terms: Path) -> str:
+def root_noun(lexicon: Lexicon) -> str:
     """What the root package is called, read from the node that declares it.
 
     The empty chain is the root, and it has no directory segment to be named by.
@@ -841,10 +543,10 @@ def root_noun(terms: Path) -> str:
     ask the root node for one string; a noun with no declaration is named by its directory,
     and a projection with no declaration is `DEFAULT_DOMAIN`. Two fallbacks, one read.
     """
-    return _declared_name(terms) or terms.name
+    return _declared_name(lexicon) or lexicon.own.name
 
 
-def corpus_domain(terms: Path) -> str:
+def corpus_domain(lexicon: Lexicon) -> str:
     """The domain a run acts on when `--domain` names none: the corpus's own.
 
     A lexicon's root node declares the name its words are fixed under, and every node below
@@ -858,10 +560,10 @@ def corpus_domain(terms: Path) -> str:
     of that repo's nouns as undeclared. `DEFAULT_DOMAIN` is the answer for a corpus with
     no root node to ask.
     """
-    return _declared_name(terms) or DEFAULT_DOMAIN
+    return _declared_name(lexicon) or DEFAULT_DOMAIN
 
 
-def verb_node(terms: Path, noun: str, verb: str | None) -> Path:
+def verb_node(lexicon: Lexicon, noun: str, verb: str | None) -> Path:
     """Where one tuple's node lives. A dotted noun is the directories it nests in.
 
     The inverse of the chain `tuples()` walks, written here once so the two cannot part
@@ -871,10 +573,13 @@ def verb_node(terms: Path, noun: str, verb: str | None) -> Path:
 
     A tuple with no verb is the noun itself, and its node is the noun's README. Formatting
     `None` into a filename would give `nav/None.md`.
+
+    In the repo's own home: a tuple is the repo's own command, and that is also where a
+    writer puts one.
     """
-    chain = () if noun == root_noun(terms) else tuple(noun.split("."))
+    chain = () if noun == root_noun(lexicon) else tuple(noun.split("."))
     leaf = "README.md" if verb is None else f"{verb}.md"
-    return terms.joinpath(*chain, leaf)
+    return lexicon.own.joinpath(*chain, leaf)
 
 
 #: The param fields a node may omit, and what omitting one means (`param.md` in the ontology).
@@ -893,7 +598,7 @@ def param_fields(meta: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def describe(terms: Path, noun: str, verb: str | None = None) -> dict[str, Any]:
+def describe(lexicon: Lexicon, noun: str, verb: str | None = None) -> dict[str, Any]:
     """What the lexicon declares for one noun, or one of its verbs, as data.
 
     `{"noun": noun, "summary": ..., "verbs": {verb: {"summary": ..., "params":
@@ -903,19 +608,22 @@ def describe(terms: Path, noun: str, verb: str | None = None) -> dict[str, Any]:
     what a reader does with that is the reader's choice. Raises `LexiconError` when the
     noun, or the named verb, is not declared.
     """
-    readme = verb_node(terms, noun, None)
+    readme = verb_node(lexicon, noun, None)
     if not readme.is_file():
         raise LexiconError(f"{noun}: not declared ({readme} does not exist)")
-    chain = () if noun == root_noun(terms) else tuple(noun.split("."))
-    wanted = sorted(declared_verbs(terms, chain)) if verb is None else [verb]
+    chain = () if noun == root_noun(lexicon) else tuple(noun.split("."))
+    wanted = sorted(declared_verbs(lexicon, chain)) if verb is None else [verb]
     verbs: dict[str, Any] = {}
     for name in wanted:
-        node = verb_node(terms, noun, name)
+        node = verb_node(lexicon, noun, name)
         if not node.is_file():
             raise LexiconError(f"{noun} {name}: not declared ({node} does not exist)")
         params = []
         for param in _params_of(node):
-            meta = _frontmatter.load(terms / "param" / f"{param}.md")
+            # The param's node as the union resolves it: a word racecar delivers is
+            # described from the delivered node when the repo holds none of its own.
+            found = lexicon.find(f"param/{param}.md")
+            meta = _frontmatter.load(found) if found is not None else {}
             params.append(
                 {
                     "name": param,

@@ -1352,13 +1352,13 @@ def _lexicon_summary(repo_root: Path, member: str) -> str:
     # Loaded only when a kind asks for a lexicon column: the lexicon's import chain reaches
     # other delivered checkers, and a bundle that declares no such column needs none of it.
     lexicon = importlib.import_module("lib.lexicon")
-    terms = repo_root / lexicon.DEFAULT_TERMS
-    if not terms.is_dir():
-        return f"(no lexicon at `{lexicon.DEFAULT_TERMS.as_posix()}`)"
+    corpora = lexicon.lexicon_corpora(repo_root)
+    if not corpora.entries:
+        return f"(no lexicon at `{corpora.own.relative_to(repo_root).as_posix()}`)"
     module, verb = parts[2], parts[3]
     chain = module.split(".")[1:]
-    noun = ".".join(chain) if chain else lexicon.root_noun(terms)
-    node = lexicon.verb_node(terms, noun, verb)
+    noun = ".".join(chain) if chain else lexicon.root_noun(corpora)
+    node = lexicon.verb_node(corpora, noun, verb)
     rel = node.relative_to(repo_root).as_posix()
     if not node.is_file():
         return f"(no lexicon node at `{rel}`)"
@@ -1791,23 +1791,7 @@ REQUIRED_HEADINGS: tuple[tuple[str, int], ...] = (
 )
 
 
-HEADING_RE = re.compile(r"^(#+)\s+(.+?)\s*$")
 STUB_RE = re.compile(r"^N/A\s+—\s+", re.MULTILINE)
-
-
-def find_headings(body: str) -> list[tuple[int, int, str, int]]:
-    """Return ``[(lineno, depth, text, char_offset), ...]`` for body headings."""
-    headings: list[tuple[int, int, str, int]] = []
-    offset = 0
-    lines = body.splitlines(keepends=True)
-    code, _ = _markdown.fenced([line.rstrip("\n") for line in lines])
-    for lineno, (line, in_fence) in enumerate(zip(lines, code), start=1):
-        if not in_fence:
-            m = HEADING_RE.match(line.rstrip("\n"))
-            if m:
-                headings.append((lineno, len(m.group(1)), m.group(2), offset))
-        offset += len(line)
-    return headings
 
 
 def normalize_heading(text: str) -> str:
@@ -1817,11 +1801,10 @@ def normalize_heading(text: str) -> str:
 
 def check_required_headings(body: str, f: Findings) -> None:
     """Verify the markdown body carries every required narrative heading."""
-    headings = find_headings(body)
-    headings_by_text: dict[str, list[tuple[int, int, int]]] = {}
-    for lineno, depth, text, offset in headings:
-        headings_by_text.setdefault(normalize_heading(text), []).append(
-            (lineno, depth, offset)
+    headings_by_text: dict[str, list[int]] = {}
+    for heading in _markdown.parse(body, frontmatter=False).headings():
+        headings_by_text.setdefault(normalize_heading(heading.title), []).append(
+            heading.level
         )
     for required_text, required_depth in REQUIRED_HEADINGS:
         key = normalize_heading(required_text)
@@ -1832,57 +1815,71 @@ def check_required_headings(body: str, f: Findings) -> None:
             )
             continue
         # If any match has the right depth, accept it; otherwise flag.
-        if not any(depth == required_depth for _, depth, _ in matches):
-            actual_depths = sorted({d for _, d, _ in matches})
+        if required_depth not in matches:
+            actual_depths = sorted(set(matches))
             f.error(
                 f"body: heading '{required_text}' present at depth(s) "
                 f"{actual_depths} but spec requires H{required_depth}"
             )
 
 
+LEAST, NOT_IN = "**Least confident**", "**Not in this brief**"
+_BULLET_RE = re.compile(r"^[-*]\s+\S")
+
+
+def confidence_bullets(body: str) -> dict[str, int] | None:
+    """The top-level bullets under each Confidence marker, or None with no `## Confidence`.
+
+    A marker the section does not carry is absent from the result. Bullets count from a
+    marker to the next marker or the end of the section, which ends at the next `##`.
+    """
+    doc = _markdown.parse(body, frontmatter=False)
+    section = next(
+        (
+            s
+            for s in doc.sections(2)
+            if s.heading is not None
+            and normalize_heading(s.heading.title) == "confidence"
+        ),
+        None,
+    )
+    if section is None:
+        return None
+    counts: dict[str, int] = {}
+    current: str | None = None
+    for line in doc.within(section):
+        if line.region != _markdown.TEXT:
+            continue
+        marker = next((m for m in (LEAST, NOT_IN) if m in line.text), None)
+        if marker is not None:
+            current = marker
+            counts[marker] = 0
+        elif current is not None and _BULLET_RE.match(line.text):
+            counts[current] += 1
+    return counts
+
+
 def check_confidence(body: str, f: Findings) -> None:
     """Confidence section: ≥3 'Least confident' bullets + ≥1 'Not in this brief' bullet."""
-    idx = body.find("## Confidence")
-    if idx < 0:
+    counts = confidence_bullets(body)
+    if counts is None:
         # The required-headings pass already flagged this. Don't double-report.
         return
-    section = body[idx:]
-    # Find the two markers.
-    least = re.search(r"\*\*Least confident\*\*", section)
-    notin = re.search(r"\*\*Not in this brief\*\*", section)
-    if not least:
+    if LEAST not in counts:
         f.error("body: ## Confidence section missing '**Least confident**' marker")
-    if not notin:
+    if NOT_IN not in counts:
         f.error("body: ## Confidence section missing '**Not in this brief**' marker")
-    if least and notin:
-        # Bullets between the two markers belong to "Least confident".
-        if least.start() < notin.start():
-            least_text = section[least.end() : notin.start()]
-            notin_text = section[notin.end() :]
-        else:
-            notin_text = section[notin.end() : least.start()]
-            least_text = section[least.end() :]
-        least_bullets = count_bullets(least_text)
-        notin_bullets = count_bullets(notin_text)
-        if least_bullets < 3:
+    if LEAST in counts and NOT_IN in counts:
+        if counts[LEAST] < 3:
             f.error(
-                f"body: ## Confidence requires ≥3 'Least confident' bullets; found {least_bullets}"
+                f"body: ## Confidence requires ≥3 'Least confident' bullets; "
+                f"found {counts[LEAST]}"
             )
-        if notin_bullets < 1:
+        if counts[NOT_IN] < 1:
             f.error(
-                f"body: ## Confidence requires ≥1 'Not in this brief' bullet; found {notin_bullets}"
+                f"body: ## Confidence requires ≥1 'Not in this brief' bullet; "
+                f"found {counts[NOT_IN]}"
             )
-
-
-def count_bullets(text: str) -> int:
-    """Count top-level markdown bullets (`- ` or `* ` at column 0) until next H2/EOF."""
-    count = 0
-    for line in text.splitlines():
-        if line.startswith("## "):
-            break
-        if re.match(r"^[-*]\s+\S", line):
-            count += 1
-    return count
 
 
 # ---------------------------------------------------------------------------
@@ -1921,7 +1918,7 @@ _SKIP_DIR_PARTS = {".git", ".venv", "__pycache__", "node_modules", ".pytest_cach
 def _path_candidates(body: str) -> list[tuple[int, str]]:
     """Return ``[(lineno, path), ...]`` for backticked spans that name a repo path."""
     out: list[tuple[int, str]] = []
-    for lineno, raw in _markdown.prose(body.splitlines()):
+    for lineno, raw, _ in _markdown.parse(body, frontmatter=False).text():
         for span in _CODE_SPAN_RE.findall(raw):
             token = span.strip().rstrip(".,;:)")
             token = re.sub(r":\d+(-\d+)?$", "", token)  # file:line citation
@@ -2096,7 +2093,7 @@ def check_dotted_names(body: str, repo_root: Path, f: Findings) -> None:
     if not names:
         return
     seen: set[str] = set()
-    for lineno, raw in _markdown.prose(body.splitlines()):
+    for lineno, raw, _ in _markdown.parse(body, frontmatter=False).text():
         for span in _CODE_SPAN_RE.findall(raw):
             token = span.strip().rstrip(".,;)")
             m = _DOTTED_RE.match(token)
@@ -2226,19 +2223,13 @@ def read_sections(text: str, where: str, f: Findings) -> list[Section]:
     it is the author's own doubt about the rest, not a description of any file.
     """
     lines = text.splitlines()
-    heads: list[tuple[int, int, str]] = []
-    _, after = _frontmatter.split(text)
-    front = text[: len(text) - len(after)].count("\n")
-    code, _ = _markdown.fenced(lines[front:])
-    for index, (raw, in_fence) in enumerate(zip(lines[front:], code), start=front):
-        m = HEADING_RE.match(raw)
-        if m and not in_fence:
-            heads.append((index, len(m.group(1)), m.group(2)))
+    heads = _markdown.parse(text).headings()
     out: list[Section] = []
-    for n, (index, depth, heading) in enumerate(heads):
+    for n, (no, depth, heading) in enumerate(heads):
         if depth not in (2, 3):
             continue
-        end = heads[n + 1][0] if n + 1 < len(heads) else len(lines)
+        index = no - 1
+        end = heads[n + 1].no - 1 if n + 1 < len(heads) else len(lines)
         body = [ln for ln in lines[index + 1 : end] if ln.strip()]
         comment = (
             body[0] if body and _SECTION_COMMENT_RE.match(body[0].strip()) else None
@@ -2554,16 +2545,17 @@ def record_review(target: str, f: Findings) -> int:
 
 def _last_h3(body: str) -> str | None:
     """The text of the final H3 heading — a tail anchor a truncated read cannot reach."""
-    h3s = [text for _, depth, text, _ in find_headings(body) if depth == 3]
-    return h3s[-1] if h3s else None
+    h3s = _markdown.parse(body, frontmatter=False).headings(3)
+    return h3s[-1].title if h3s else None
 
 
 def _counts_rows(body: str) -> int:
     """The number of kind rows in a generated inventory's ``## Counts`` table."""
-    if "## Counts" not in body:
+    doc = _markdown.parse(body, frontmatter=False)
+    section = doc.section("Counts")
+    if section is None:
         return 0
-    section = body[body.index("## Counts") :].split("\n## ", 1)[0]
-    rows = [ln for ln in section.splitlines() if ln.startswith("| ")]
+    rows = [ln for ln in doc.within(section) if ln.text.startswith("| ")]
     return max(len(rows) - 2, 0)  # the header and its separator
 
 
@@ -2577,15 +2569,9 @@ def _challenge_member(brief_path: Path) -> list[str]:
     """
     text = brief_path.read_text(encoding="utf-8")
     _, body = _frontmatter.split(text)
-    section = body[body.find("## Confidence") :] if "## Confidence" in body else ""
-    least = re.search(r"\*\*Least confident\*\*", section)
-    notin = re.search(r"\*\*Not in this brief\*\*", section)
-    doubts = (
-        count_bullets(section[least.end() : notin.start()])
-        if least and notin and least.start() < notin.start()
-        else 0
-    )
-    headings = find_headings(body)
+    counts = confidence_bullets(body) or {}
+    doubts = counts.get(LEAST, 0) if NOT_IN in counts else 0
+    headings = _markdown.parse(body, frontmatter=False).headings()
     token = sha256(text.encode("utf-8")).hexdigest()[:12]
     fourth = f"  4. How many bullets follow '**Least confident**'? -> {doubts}"
     if member_role(_frontmatter.parse(text)[0] or None) == "inventory":
@@ -2595,9 +2581,9 @@ def _challenge_member(brief_path: Path) -> list[str]:
     return [
         f"challenge: {brief_path.name}  token {token}",
         f"  1. How many H2 sections does {brief_path.name} carry? -> "
-        f"{sum(1 for _, d, _, _ in headings if d == 2)}",
+        f"{sum(1 for h in headings if h.level == 2)}",
         f"  2. How many H3 subsections in total? -> "
-        f"{sum(1 for _, d, _, _ in headings if d == 3)}",
+        f"{sum(1 for h in headings if h.level == 3)}",
         f"  3. What is its LAST H3 heading? -> {_last_h3(body)}",
         fourth,
     ]

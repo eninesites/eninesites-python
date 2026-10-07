@@ -375,10 +375,9 @@ def py_prose(path: Path) -> Iterator[tuple[int, str]]:
 
 
 def md_prose(path: Path) -> Iterator[tuple[int, str]]:
-    """Yield (lineno, text) for every markdown line OUTSIDE a fenced code block."""
-    yield from _markdown.prose(
-        path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    )
+    """Yield (lineno, text) for every text line of a markdown file: not frontmatter, not code."""
+    doc = _markdown.parse(path.read_text(encoding="utf-8", errors="ignore"))
+    yield from ((line.no, line.text) for line in doc.text())
 
 
 def unquoted(line: str) -> str:

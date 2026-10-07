@@ -19,4 +19,4 @@ list of nouns leaves it out. A repo's own `api` noun would give the word a secon
 
 racecar declares it, and its commands work on that layer: `python -m racecar.api check`
 reports each surface whose dispatch routes around `api`, and `fix` plans the repair. Their
-verb nodes sit in racecar's own `docs/lexicon/api/`, where this page is the same file.
+verb nodes sit in racecar's own `docs/lexicon/api/`, where this node is the same file.

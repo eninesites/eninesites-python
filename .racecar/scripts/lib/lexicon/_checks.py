@@ -9,19 +9,19 @@ Complexity: O(1) per tuple per check -- every read the checks need is on the Gra
 
 from __future__ import annotations
 
+import os
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from lib.lexicon import _audit
 from lib.lexicon._audit import (
     _DISTINGUISHABLE,
     _EXPECTED,
-    _NARROWS,
-    _NODES_CACHE,
     _cli_gap,
     _well_formed,
     verb_gap,
 )
+from lib.lexicon._corpora import OWN, Lexicon
 from lib.lexicon._graph import (
     Answer,
     Finding,
@@ -35,10 +35,8 @@ from lib.lexicon._graph import (
 from lib.lexicon._nodes import (
     API_NAMES,
     DEFAULT_DOMAIN,
-    FLAG_TREE,
-    NOUN_TREE,
-    NOUNSPACE_REL,
     ONTOLOGY_REL,
+    OWN_ONLY,
     _has_prose,
     _sections,
     domains_of,
@@ -46,7 +44,7 @@ from lib.lexicon._nodes import (
     root_noun,
 )
 from lib.lexicon._terms import instead_disagrees
-from lib.shared import _frontmatter
+from lib.shared import _frontmatter, _markdown
 from lib.shared._files import repo_files
 from lib.shared._root import package_root
 
@@ -65,7 +63,7 @@ def nouns_of(g: Graph) -> dict[tuple[str, ...], Path]:
     From the list of tuples, not from a walk. Each noun is a row with no verb, so
     `graph` is here whether or not it has verbs of its own.
     """
-    root = root_noun(g.terms)
+    root = root_noun(g.lexicon)
     return {
         () if row.noun == root else tuple(row.noun.split(".")): row.node
         for row in g.rows
@@ -88,7 +86,7 @@ def findings(g: Graph) -> list[Finding]:
     if not g.kinds:
         return [
             Finding(
-                str(ontology_path(g.terms)),
+                str(ontology_path(g.lexicon)),
                 "no ontology declared. The nounspace cannot be graded against a set of "
                 "directory names; declare `kinds:` here.",
                 "implemented",
@@ -110,7 +108,7 @@ def findings(g: Graph) -> list[Finding]:
     if not declared:
         out.append(
             Finding(
-                str(g.terms),
+                str(g.lexicon.own),
                 "no noun declares itself. The nounspace is empty.",
                 "implemented",
             )
@@ -191,7 +189,7 @@ def check_undeclared_verbs(g: Graph) -> list[Answer]:
     """
     if g.pkg is None:
         return []
-    root = root_noun(g.terms)
+    root = root_noun(g.lexicon)
     domain = (g.selected or (DEFAULT_DOMAIN,))[0]
     declared: dict[str, set[str]] = {}
     for row in g.rows:
@@ -206,11 +204,11 @@ def check_undeclared_verbs(g: Graph) -> list[Answer]:
         offered = g.cli.get(module)
         if not offered:
             continue
-        where = g.terms.joinpath(*parts)
+        where = g.lexicon.own.joinpath(*parts)
         out += [
             Answer(
                 "",
-                undeclared(domain, chain or root, verb, g.terms),
+                undeclared(domain, chain or root, verb, g.lexicon),
                 (f"python -m {module} {verb}",),
                 (
                     Finding(
@@ -231,13 +229,13 @@ def check_undeclared_verbs(g: Graph) -> list[Answer]:
     out += [
         Answer(
             "",
-            undeclared(domain, child.name, None, g.terms),
+            undeclared(domain, child.name, None, g.lexicon),
             (f"python -m {g.pkg.name}.{child.name}",),
             (
                 Finding(
                     str(child.relative_to(g.root)),
                     f"addressable as `python -m {g.pkg.name}.{child.name}` but no "
-                    f"`{NOUNSPACE_REL}/{child.name}/README.md` declares it a noun.",
+                    f"`{child.name}/README.md` declares it a noun.",
                     "",
                 ),
             ),
@@ -284,7 +282,7 @@ def check_undeclared_flags(g: Graph) -> list[Answer]:
         out.append(
             Answer(
                 "",
-                undeclared(domain, "param", flag[2:], g.terms),
+                undeclared(domain, "param", flag[2:], g.lexicon),
                 tuple(sorted(sites)),
                 (
                     Finding(
@@ -303,7 +301,21 @@ def check_undeclared_flags(g: Graph) -> list[Answer]:
 ROW = "| [{label}]({href}) | {second} | {gloss} |"
 
 
-def index_body(root: Path, subdir: Path, second_key: str) -> str:
+def _indexed(lexicon: Lexicon, under: str) -> list[tuple[Path, dict[str, str]]]:
+    """The repo's own nodes under `under`, each with its frontmatter, index excluded."""
+    return [
+        (lexicon.path(entry), _frontmatter.load(lexicon.path(entry)))
+        for entry in lexicon.nodes(origins=OWN_ONLY, under=under)
+        if entry.filename != "README.md"
+    ]
+
+
+def index_body(
+    lexicon: Lexicon,
+    under: str,
+    second_key: str,
+    indexed: list[tuple[Path, dict[str, str]]] | None = None,
+) -> str:
     """Render a tree's index table from its nodes' frontmatter.
 
     DERIVED, never stored. `DOC_GRAPH.md` forbids writing down what the graph already
@@ -313,15 +325,12 @@ def index_body(root: Path, subdir: Path, second_key: str) -> str:
     The gloss comes from each node's own `summary`, so a node owns its one-line
     description in the same place it owns its argument.
     """
-    # The kind comes out of `meta`, which `_audit.nodes()` already parsed.
-    # `kind_of(path)` reads FRONTMATTER, so calling it here would re-read and re-parse
-    # the same file -- twice per row, since the sort key calls it too.
     table = []
     for path, meta in sorted(
-        _audit.nodes(root, subdir),
+        _indexed(lexicon, under) if indexed is None else indexed,
         key=lambda pm: (str(pm[1].get("kind") or ""), pm[0].stem),
     ):
-        href = path.relative_to(root / subdir).as_posix()
+        href = path.relative_to(lexicon.own / under).as_posix()
         second = (
             meta.get("kind", "?") if second_key == "kind" else meta.get(second_key, "?")
         )
@@ -337,7 +346,7 @@ def index_body(root: Path, subdir: Path, second_key: str) -> str:
 
 
 def check_index(
-    root: Path, subdir: Path, second_key: str, write: bool
+    lexicon: Lexicon, under: str, second_key: str, write: bool
 ) -> list[Finding]:
     # Every other check starts from the list of tuples, and this one correctly does not.
     # Its subject is a RENDERING of a directory against that
@@ -361,12 +370,13 @@ def check_index(
     `terraform fmt -check` use, never a second derivation that could disagree with the
     first.
     """
-    directory = root / subdir
-    if not directory.is_dir() or not _audit.nodes(root, subdir):
+    index = lexicon.at(f"{under}/README.md".lstrip("/"), OWN)
+    # Gathered once: the emptiness test and the table read the same nodes, and each node's
+    # frontmatter is parsed once per call (#54).
+    indexed = _indexed(lexicon, under)
+    if index is None or not indexed:
         return []
-    readme = directory / "README.md"
-    if not readme.is_file():
-        return []
+    readme = lexicon.path(index)
     text = readme.read_text(encoding="utf-8")
     start, end = "<!-- BEGIN INDEX -->", "<!-- END INDEX -->"
     if start not in text or end not in text:
@@ -374,18 +384,17 @@ def check_index(
     head, rest = text.split(start, 1)
     _, tail = rest.split(end, 1)
     header = f"| term | {second_key} | in one line |\n|---|---|---|"
-    body = index_body(root, subdir, second_key)
+    body = index_body(lexicon, under, second_key, indexed)
     want = f"{start}\n\n{header}\n{body}\n\n{end}"
     rebuilt = head + want + tail
     if rebuilt == text:
         return []
     if write:
         readme.write_text(rebuilt, encoding="utf-8")
-        _NODES_CACHE.pop((root, subdir), None)
         return []
     return [
         Finding(
-            str(readme.relative_to(root)),
+            str(readme.relative_to(lexicon.root)),
             "index is stale against the nodes. Regenerate with `lexicon.py check "
             "--apply`; it is derived, not written.",
             "indexed",
@@ -403,7 +412,7 @@ def address_table(g: Graph) -> tuple[set[str], dict[str, set[str]]]:
     to a question the list already answers. The chain for the root is the empty string, because
     that is how `python -m <pkg>` is spelled with nothing after the package.
     """
-    root = root_noun(g.terms)
+    root = root_noun(g.lexicon)
     nouns: set[str] = set()
     verbs: dict[str, set[str]] = {}
     for row in g.rows:
@@ -434,7 +443,7 @@ def command_prose_findings(g: Graph, exempt: tuple[str, ...] = ()) -> list[Findi
     # The PACKAGE name, from the graph root's own `name:` -- not the directory, which is
     # `lexicon` and matches no module. Getting this wrong is silent: every citation reads as
     # belonging to some other package and the checker returns a confident zero.
-    pkg = root_noun(g.terms)
+    pkg = root_noun(g.lexicon)
     out: list[Finding] = []
     # `repo_files`, not a private rglob. The shared walk already excludes `.venv`, agent
     # worktrees and vendored trees; a hand-rolled one re-learns each exclusion by being
@@ -523,7 +532,7 @@ def check_domain(row: Row, g: Graph) -> list[Answer]:
         return answer(row, [], [])
     out: list[Finding] = []
     for node in footprint(row, g):
-        rel = str(g.terms / node.relative_to(g.terms))
+        rel = str(node)
         mine = domains_of(node)
         if not mine:
             out.append(
@@ -559,18 +568,20 @@ def check_domain(row: Row, g: Graph) -> list[Answer]:
                     Finding(
                         rel,
                         f"domain {mine} is not a subset of its parent "
-                        f"{parent.relative_to(g.terms)} {up} — that leaves a projection "
+                        f"{_position(parent, g)} {up} — that leaves a projection "
                         "rootless.",
                         "domain",
                     )
                 )
     faulted = {f.where for f in out}
-    kept = [
-        str(p)
-        for p in footprint(row, g)
-        if str(g.terms / p.relative_to(g.terms)) not in faulted
-    ]
+    kept = [str(p) for p in footprint(row, g) if str(p) not in faulted]
     return answer(row, kept, out)
+
+
+def _position(node: Path, g: Graph) -> str:
+    """A node's place within its home, for a message; its path when it is no entry."""
+    entry = g.lexicon.entry_of(node)
+    return str(node) if entry is None else entry.position
 
 
 def check_required(row: Row, g: Graph) -> list[Answer]:
@@ -593,7 +604,7 @@ def check_required(row: Row, g: Graph) -> list[Answer]:
     if not g.kinds:
         return answer(row, [], [])
     out: list[Finding] = []
-    above = g.terms.parent.parent
+    above = g.lexicon.own.parent.parent
     for node in footprint(row, g):
         meta = _frontmatter.load(node)
         declared = str(meta.get("kind") or "")
@@ -668,7 +679,7 @@ def noun_reaches_code(chain: tuple[str, ...], g: Graph) -> list[Finding]:
     # merely share its last segment, and whose presence would silently stop the sub-noun
     # being graded.
     scripted = len(chain) == 1 and (g.root / "scripts" / f"{chain[0]}.py").is_file()
-    node = (g.terms.joinpath(*chain) / "README.md").relative_to(g.root)
+    node = (g.lexicon.own.joinpath(*chain) / "README.md").relative_to(g.root)
 
     if not vertical and not scripted:
         return [
@@ -718,7 +729,7 @@ def check_implemented(row: Row, g: Graph) -> list[Answer]:
         return answer(row, [], [])
     if g.pkg is None:
         return answer(row, [], [])
-    chain = tuple(row.noun.split(".")) if row.noun != root_noun(g.terms) else ()
+    chain = tuple(row.noun.split(".")) if row.noun != root_noun(g.lexicon) else ()
     module_path = ".".join((g.pkg.name, *chain))
 
     # The NOUN half, asked here rather than in a function of its own. It is the same question
@@ -779,7 +790,7 @@ def check_cuts_across(row: Row, g: Graph) -> list[Answer]:
     ):
         if len(users) < 2:
             continue
-        node = g.terms / bucket / f"{word}.md"
+        node = g.lexicon.own / bucket / f"{word}.md"
         where = word_node(g, bucket, word)
         if where is not None:
             fixed.append(where)
@@ -798,19 +809,11 @@ def check_cuts_across(row: Row, g: Graph) -> list[Answer]:
 def check_flag_type(row: Row, g: Graph) -> list[Answer]:
     """Does each param this tuple declares have a node that agrees with the code?
 
-    Three questions per param, in the order a reader asks them: is the node well formed, does
-    a local node contradict canon, and does the declared `type:` match what the code actually
-    declares for that spelling.
+    Two questions per param, in the order a reader asks them: is the node well formed, and
+    does the declared `type:` match what the code actually declares for that spelling.
 
-    A local node may EXTEND the vocabulary and may not redefine it. Taking a disagreement to
-    racecar is the fix; overriding it here would make the canon mean whatever the last repo
-    said, which is the whole reason there is a canon.
-
-    It may also NARROW it, which is not a redefinition (`_NARROWS`). A repo whose
-    `--type` takes a closed set has made canon's `string` stricter, not false, so the
-    canon-agreement check stands aside and the argparse-agreement check below decides.
-    Otherwise such a repo could not conform by any edit to its own node: `enum`
-    contradicts canon and `string` contradicts its own code.
+    Whether a local node contradicts canon is not asked here. That is two nodes for one word
+    disagreeing, which `_audit.flag_clashes` reports, as a warning, wherever the two sit.
     """
     out: list[Finding] = []
     agreed: list[str] = []
@@ -823,20 +826,8 @@ def check_flag_type(row: Row, g: Graph) -> list[Answer]:
             where, _, what = malformed.partition(": ")
             out.append(Finding(where, what, "flag-type"))
             continue
-        fixed = g.flag_canon.get(flag)
-        narrows = fixed is not None and fixed.kind in _NARROWS.get(node.kind, set())
-        if not node.canon and fixed and fixed.kind != node.kind and not narrows:
-            out.append(
-                Finding(
-                    node.where,
-                    f"`type: {node.kind}` contradicts canon, which declares "
-                    f"`{fixed.kind}` in {fixed.where}. A local node may extend the "
-                    "vocabulary and may not redefine it — take the disagreement to "
-                    "racecar rather than overriding it here.",
-                    "flag-type",
-                )
-            )
-            continue
+        # A node that contradicts canon is `_audit.flag_clashes`'s finding: two nodes for one
+        # word disagreeing is reported there, as a warning, whichever sides they are on.
         actual = g.flag_types.get(f"--{flag}")
         if actual is None:
             continue  # documented for adopters; this repo has no occasion for it
@@ -905,7 +896,17 @@ def check_indexed(row: Row, g: Graph) -> list[Answer]:
         # the index to list itself.
         if node.name == "README.md":
             continue
-        listed = index_rows(node.parent)
+        # The index beside the node, in the node's own home.
+        entry = g.lexicon.entry_of(node)
+        index = (
+            None
+            if entry is None
+            else g.lexicon.at(
+                str(PurePosixPath(entry.position).parent / "README.md").lstrip("./"),
+                entry.origin,
+            )
+        )
+        listed = None if index is None else index_rows(g.lexicon.path(index))
         if listed is None:
             continue  # this tree publishes no index, so it owes nothing
         if node.name in listed:
@@ -931,19 +932,25 @@ def check_unindexed(g: Graph) -> list[Answer]:
     """
     out: list[Answer] = []
     domain = (g.selected or (DEFAULT_DOMAIN,))[0]
-    for subdir in (NOUN_TREE, FLAG_TREE):
-        directory = g.root / subdir
-        listed = index_rows(directory)
-        if listed is None:
+    for under in ("", "param"):
+        index = g.lexicon.at(f"{under}/README.md".lstrip("/"), OWN)
+        listed = None if index is None else index_rows(g.lexicon.path(index))
+        if index is None or listed is None:
             continue
+        readme = g.lexicon.path(index)
         out += [
             Answer(
                 "",
-                undeclared(domain, subdir.name, Path(href).stem, g.terms),
+                undeclared(
+                    domain,
+                    PurePosixPath(under).name or g.lexicon.own.name,
+                    Path(href).stem,
+                    g.lexicon,
+                ),
                 (),
                 (
                     Finding(
-                        str(directory / "README.md"),
+                        str(readme),
                         f"index carries a row for `{href}`, which is not a node here. The "
                         "table is derived; regenerate with `lexicon.py check --apply`.",
                         "",
@@ -951,23 +958,21 @@ def check_unindexed(g: Graph) -> list[Answer]:
                 ),
             )
             for href in sorted(listed)
-            if not (directory / href).is_file()
+            if g.lexicon.at(os.path.normpath(f"{under}/{href}".lstrip("/")), OWN)
+            is None
         ]
     return out
 
 
-def index_rows(directory: Path) -> set[str] | None:
-    """The hrefs a tree's index table lists, or None when the tree publishes no table.
+def index_rows(readme: Path) -> set[str] | None:
+    """The hrefs an index README's table lists, or None when it publishes no table.
 
     None and an empty set are different answers and the difference is the whole rule: no
     markers means no duty, an empty table between markers means a duty being failed.
     """
-    readme = directory / "README.md"
-    if not readme.is_file():
-        return None
     text = readme.read_text(encoding="utf-8")
     start, end = "<!-- BEGIN INDEX -->", "<!-- END INDEX -->"
     if start not in text or end not in text:
         return None
     block = text.split(start, 1)[1].split(end, 1)[0]
-    return set(re.findall(r"\]\(([^)]+)\)", block))
+    return {link.target for link in _markdown.parse(block, frontmatter=False).links()}

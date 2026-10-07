@@ -214,16 +214,16 @@ def _entries(
 def declared_half(root: Path, tree: dict[str, Any], package: str) -> list[Invocation]:
     """The command lines the lexicon declares, each marked with whether it may run."""
     lexicon = _lexicon(root)
-    terms = root / lexicon.DEFAULT_TERMS
+    corpora = lexicon.lexicon_corpora(root)
     spec = kinds(root, package)
     out: list[Invocation] = []
     for node in _nodes(tree):
         module = str(node.get("pkg") or "")
         noun = _noun(module, package)
-        lexicon_noun = noun if noun != package else lexicon.root_noun(terms)
+        lexicon_noun = noun if noun != package else lexicon.root_noun(corpora)
         for verb in node.get("subcommands") or []:
             name = str(verb["name"])
-            where = lexicon.verb_node(terms, lexicon_noun, name)
+            where = lexicon.verb_node(corpora, lexicon_noun, name)
             kind, status = spec.get((noun, name), ("", ""))
             for before, args, fixture in _entries(where):
                 runs = status == "exists" and kind in ("read", "write", "job")
@@ -287,7 +287,7 @@ def absent(
         if line.runs
     }
     lexicon = _lexicon(root)
-    terms = root / lexicon.DEFAULT_TERMS
+    corpora = lexicon.lexicon_corpora(root)
     out: list[dict[str, str]] = []
     for node in _nodes(tree):
         module = str(node.get("pkg") or "")
@@ -301,7 +301,7 @@ def absent(
             if spec.get((this, name)) not in OWED or (this, name) in ran:
                 continue
             where = lexicon.verb_node(
-                terms, this if this != package else lexicon.root_noun(terms), name
+                corpora, this if this != package else lexicon.root_noun(corpora), name
             )
             out.append(
                 {

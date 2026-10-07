@@ -6,7 +6,7 @@ import dataclasses
 from pathlib import Path
 
 from ._findings import Finding
-from ._root import flat_package
+from ._root import flat_package, has_library, server_root
 
 #: The two shapes where a library sits beside a `server/` Django project. A check about the
 #: server tree, its pyproject or its lockfile asks this, never one name of the two.
@@ -119,10 +119,7 @@ def detect_shape(root: Path) -> tuple[Shape, list[Finding]]:
     addition.
     """
     root_py = root / "pyproject.toml"
-    src_dir = root / "src"
     server_py = root / "server" / "pyproject.toml"
-    server_manage = root / "server" / "manage.py"
-    root_manage = root / "manage.py"
 
     if not root_py.exists():
         return (
@@ -138,18 +135,16 @@ def detect_shape(root: Path) -> tuple[Shape, list[Finding]]:
         )
 
     flat = flat_package(root)  # the library at the root, when there is no src/
-    has_library = src_dir.is_dir() or flat is not None  # PYTHON_LIBRARY axis
-    has_django_server = server_manage.exists()  # DJANGO_PROJECT axis, server-shell form
-    # Startproject Django (the django-admin canon): a root manage.py, no library and no
-    # server/manage.py. A library repo's Django belongs under server/, so a root manage.py
-    # beside a library is not this shape.
-    has_django_root = (
-        root_manage.is_file() and not has_library and not has_django_server
-    )
-    has_django = has_django_server or has_django_root
+    library = has_library(root)  # PYTHON_LIBRARY axis
+    # DJANGO_PROJECT axis: `server_root` is the one home for where Django lives, including
+    # the rule that a root manage.py beside a library is not the `django` shape.
+    django_home = server_root(root)
+    has_django_server = django_home == root / "server"
+    has_django_root = django_home == root
+    has_django = django_home is not None
 
     findings: list[Finding] = []
-    if not (has_library or has_django):
+    if not (library or has_django):
         findings.append(
             Finding(
                 "Blocker",
@@ -162,19 +157,15 @@ def detect_shape(root: Path) -> tuple[Shape, list[Finding]]:
         )
     return (
         Shape(
-            has_library=has_library,
+            has_library=library,
             has_django=has_django,
             library_pyproject=root_py,
             server_pyproject=(
                 server_py
-                if (has_library and has_django_server and server_py.exists())
+                if (library and has_django_server and server_py.exists())
                 else None
             ),
-            manage_py=(
-                server_manage
-                if has_django_server
-                else (root_manage if has_django_root else None)
-            ),
+            manage_py=django_home / "manage.py" if django_home is not None else None,
             django_root=has_django_root,
             flat_package=flat,
         ),

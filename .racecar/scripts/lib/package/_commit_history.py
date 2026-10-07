@@ -52,12 +52,12 @@ from pathlib import Path
 
 from lib import not_a_command
 from lib.package._error import PackageError
-from lib.shared import _commits
+from lib.shared import _commits, _markdown
+from lib.shared._constants import RELEASE_RE, RELEASE_TITLE_RE
 
 SUBJECT_MAX = 72
 
 _FOOTER_RE = re.compile(r"^Bump version to (\d+\.\d+\.\d+)\.$", re.MULTILINE)
-_SECTION_RE = re.compile(r"^## (\d+\.\d+\.\d+) - (\d{4}-\d{2}-\d{2})", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -169,7 +169,13 @@ def audit_merge(sha: str, root: Path | None = None) -> list[Finding]:
 def sections_at(rev: str, root: Path | None = None) -> dict[str, str]:
     """`{version: date}` for every released CHANGELOG.md section at `rev`."""
     raw = _git("show", f"{rev}:CHANGELOG.md", root=root)
-    return dict(_SECTION_RE.findall(raw)) if raw else {}
+    if not raw:
+        return {}
+    return {
+        m.group(1): m.group(2)
+        for h in _markdown.parse(raw).headings(2)
+        if (m := RELEASE_TITLE_RE.fullmatch(h.title)) and RELEASE_RE.match(m.group(1))
+    }
 
 
 def _lagged_brief(sha: str, new: str, root: Path | None = None) -> list[str]:

@@ -19,7 +19,7 @@ def _argument(row: Row, g: Graph, flag: str) -> dict[str, Any] | None:
     """The argument argparse builds for `flag` in this tuple's verb, or None."""
     if g.pkg is None or row.verb is None:
         return None
-    chain = tuple(row.noun.split(".")) if row.noun != root_noun(g.terms) else ()
+    chain = tuple(row.noun.split(".")) if row.noun != root_noun(g.lexicon) else ()
     module = ".".join((g.pkg.name, *chain))
     dest = flag.replace("-", "_")
     for arg in g.verb_args.get((module, row.verb), ()):

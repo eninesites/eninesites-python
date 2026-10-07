@@ -8,12 +8,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from lib.lexicon._corpora import DELIVERED, Lexicon
 from lib.lexicon._nodes import (
-    DELIVERED_RELS,
     corpus_domain,
     declared_domains,
     declared_nouns,
-    delivered_corpus,
     domains_of,
 )
 from lib.shared import _frontmatter
@@ -28,27 +27,25 @@ def in_selection(declared: list[str], selected: list[str], domain: str) -> bool:
     return not (declared and selected and domain not in selected)
 
 
-def reserved_nouns(terms: Path) -> frozenset[str]:
+def reserved_nouns(lexicon: Lexicon) -> frozenset[str]:
     """The nouns the delivered lexicon reserves: `kind: noun` with `status: reserved`.
 
     A reserved noun is not eligible: no repo may declare it, and the tuple list leaves it
     out. It binds a repo that RECEIVES the delivered lexicon (`.racecar/docs/lexicon/`), not
     racecar, which authors it (`docs/rc_lexicon/`) and holds the word's owner.
     """
-    delivered = delivered_corpus(terms)
-    if delivered is None or delivered.parts[-len(DELIVERED_RELS[1].parts) :] != (
-        DELIVERED_RELS[1].parts
-    ):
-        return frozenset()
     return frozenset(
-        str(meta.get("name")).strip('"')
-        for readme in delivered.glob("*/README.md")
-        if (meta := _frontmatter.load(readme)).get("kind") == "noun"
-        and meta.get("status") == "reserved"
+        str(_frontmatter.load(lexicon.path(entry)).get("name")).strip('"')
+        for entry in lexicon.nodes(origins=frozenset({DELIVERED}), kind="noun")
+        if entry.filename == "README.md"
+        and len(entry.parts) == 1
+        and _frontmatter.load(lexicon.path(entry)).get("status") == "reserved"
     )
 
 
-def eligible_nouns(nounspace: Path, selected: list[str]) -> dict[tuple[str, ...], Path]:
+def eligible_nouns(
+    lexicon: Lexicon, selected: list[str]
+) -> dict[tuple[str, ...], Path]:
     """The nouns a run acts on: `declared_nouns` in the `selected` domains, less the reserved.
 
     `selected` is REQUIRED, so the rule "a pass grades one projection" is not re-typed
@@ -59,9 +56,9 @@ def eligible_nouns(nounspace: Path, selected: list[str]) -> dict[tuple[str, ...]
     A noun declaring NO domain is in every selection, by `in_selection`'s rule: you cannot
     filter by a domain a node does not have, and "declares no domain" has to be reported.
     """
-    reserved = reserved_nouns(nounspace)
+    reserved = reserved_nouns(lexicon)
     found: dict[tuple[str, ...], Path] = {}
-    for chain, node in declared_nouns(nounspace).items():
+    for chain, node in declared_nouns(lexicon).items():
         if chain and chain[0] in reserved:
             continue
         declared = domains_of(node)
@@ -71,7 +68,7 @@ def eligible_nouns(nounspace: Path, selected: list[str]) -> dict[tuple[str, ...]
 
 
 def eligible_domains(
-    terms: Path, requested: list[str] | None = None, *, every: bool = False
+    lexicon: Lexicon, requested: list[str] | None = None, *, every: bool = False
 ) -> list[str]:
     """The domains a run acts on, built once: every declared domain under `every`, else the
     ones `requested`, else the corpus's own.
@@ -82,7 +79,7 @@ def eligible_domains(
     answer and nobody else's.
     """
     if every:
-        return declared_domains(terms)
+        return declared_domains(lexicon)
     if requested is not None:
         return list(requested)
-    return [corpus_domain(terms)]
+    return [corpus_domain(lexicon)]

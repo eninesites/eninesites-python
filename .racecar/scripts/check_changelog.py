@@ -24,24 +24,25 @@ Complexity: O(n), n = lines in CHANGELOG.md
 
 from __future__ import annotations
 
-import re
 import sys
 import tomllib
 from pathlib import Path
 
+from lib.shared import _markdown
+from lib.shared._constants import RELEASE_TITLE_RE, UNRELEASED_TITLE
 from lib.shared._root import find_repo_root
-
-# A released entry: `## X.Y.Z - YYYY-MM-DD` (the `## [Unreleased]` placeholder that a
-# fresh changelog may carry is intentionally NOT matched, since it has no version).
-_ENTRY_RE = re.compile(
-    r"^## (\d+\.\d+\.\d+(?:[-+][\w.-]+)?) - \d{4}-\d{2}-\d{2}", re.MULTILINE
-)
 
 
 def newest_changelog_version(changelog: str) -> str | None:
-    """Return the version of the newest released CHANGELOG.md entry, or None."""
-    match = _ENTRY_RE.search(changelog)
-    return match.group(1) if match else None
+    """Return the version of the newest released CHANGELOG.md entry, or None.
+
+    A released entry is `## X.Y.Z - YYYY-MM-DD`; the `## [Unreleased]` placeholder a fresh
+    changelog may carry has no version, so it is not one.
+    """
+    for heading in _markdown.parse(changelog).headings(2):
+        if match := RELEASE_TITLE_RE.fullmatch(heading.title):
+            return match.group(1)
+    return None
 
 
 def declared_version(root: Path) -> str | None:
@@ -94,13 +95,10 @@ def heading_problems(changelog: str) -> list[str]:
     """
     problems: list[str] = []
     seen: dict[str, int] = {}
-    for lineno, line in enumerate(changelog.splitlines(), start=1):
-        if not line.startswith("## "):
+    for lineno, _, heading in _markdown.parse(changelog).headings(2):
+        if heading == UNRELEASED_TITLE:
             continue
-        heading = line[3:].strip()
-        if heading == "[Unreleased]":
-            continue
-        match = _ENTRY_RE.match(line)
+        match = RELEASE_TITLE_RE.fullmatch(heading)
         if match is None:
             problems.append(
                 f"CHANGELOG.md:{lineno}: malformed heading `## {heading}` — "

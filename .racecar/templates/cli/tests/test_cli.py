@@ -122,13 +122,14 @@ def test_an_unknown_verb_is_named_as_one(node: ModuleType, run_cli: Run) -> None
 @pytest.mark.parametrize(
     ("node", "verb"), REQUIRING, ids=[v.prog for _, v in REQUIRING]
 )
-def test_a_missing_argument_shows_the_verbs_help_and_exits_0(
+def test_a_missing_argument_shows_the_verbs_help_and_exits_2(
     node: ModuleType, verb: argparse.ArgumentParser, run_cli: Run
 ) -> None:
     code, out, err = run_cli(node.main, [verb.prog.rsplit(" ", 1)[-1]])
-    assert code == 0
-    assert _flat(out).startswith(f"usage: {verb.prog} ")
-    assert err.startswith(f"{verb.prog}: needs ")
+    assert code == 2
+    assert out == ""
+    assert _flat(err).startswith(f"usage: {verb.prog} ")
+    assert err.rstrip().splitlines()[-1].startswith(f"{verb.prog}: needs ")
 
 
 @pytest.mark.parametrize(("node", "verb"), VERBS, ids=[v.prog for _, v in VERBS])

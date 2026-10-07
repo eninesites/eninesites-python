@@ -13,10 +13,9 @@ from __future__ import annotations
 from lib.lexicon._graph import Answer, Finding, Graph, undeclared
 from lib.lexicon._nodes import (
     DEFAULT_DOMAIN,
+    OWN_ONLY,
     corpus_domain,
     domains_of,
-    kind_of,
-    pages,
 )
 from lib.shared import _frontmatter
 from lib.shared._root import package_dir
@@ -76,16 +75,17 @@ def shipped_findings(g: Graph) -> list[Answer]:
     # lexicon, so there is nothing to read. The honest answer is then no findings rather than
     # a confident wrong one -- the same call `_cli_gap` makes for the root noun. Where the
     # corpus IS racecar's, the two sets coincide.
-    if corpus_domain(g.terms) != DEFAULT_DOMAIN:
+    if corpus_domain(g.lexicon) != DEFAULT_DOMAIN:
         return []
     shipped = shipped_words(g)
     out: list[Answer] = []
-    for node, _ in pages(g.terms):
+    for entry in g.lexicon.nodes(origins=OWN_ONLY):
+        node = g.lexicon.path(entry)
         mine = domains_of(node)
         if not mine or DEFAULT_DOMAIN in mine:
             continue
         name = str(_frontmatter.load(node).get("name") or node.stem).strip('"')
-        chain = node.relative_to(g.terms).parent.parts
+        chain = entry.parts
         dotted = ".".join(chain)
         # A node under a noun is graded against THAT noun's verbs; a node with no chain is the
         # top-level borrowing the bare-name term was written for. Matching a nested node
@@ -106,15 +106,14 @@ def shipped_findings(g: Graph) -> list[Answer]:
         # must not match: it fixes the flag `--host`, which is a different thing wearing a
         # noun's spelling.
         hit = hit or (
-            kind_of(node, g.terms) == "verb"
-            and any(name in verbs for verbs in shipped.values())
+            entry.kind == "verb" and any(name in verbs for verbs in shipped.values())
         )
         if not hit:
             continue
         out.append(
             Answer(
                 "",
-                undeclared(DEFAULT_DOMAIN, dotted or name, name, g.terms),
+                undeclared(DEFAULT_DOMAIN, dotted or name, name, g.lexicon),
                 (),
                 (
                     Finding(

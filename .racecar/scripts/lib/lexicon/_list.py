@@ -11,14 +11,15 @@ from pathlib import Path
 from typing import Any
 
 from lib import not_a_command
+from lib.lexicon._corpora import Lexicon, LexiconError
 from lib.lexicon._emit import emit
 from lib.lexicon._graph import listing, words
-from lib.lexicon._nodes import OK, LexiconError, declared_kinds
+from lib.lexicon._nodes import OK, declared_kinds
 from lib.lexicon.renderer import text
 
 
 def run(
-    terms: Path, selected: list[str], *, kind: list[str] | None = None
+    lexicon: Lexicon, selected: list[str], *, kind: list[str] | None = None
 ) -> list[dict[str, Any]]:
     """`[{domain, noun, verb, params}, ...]`, or with `kind` the words of those kinds.
 
@@ -30,19 +31,19 @@ def run(
     lexicon does not declare.
     """
     if not kind:
-        return listing(terms, selected)
-    known = declared_kinds(terms)
+        return listing(lexicon, selected)
+    known = declared_kinds(lexicon)
     unknown = [k for k in kind if k not in known]
     if unknown:
         raise LexiconError(
             f"no such kind: {', '.join(unknown)} — this lexicon declares "
             f"{', '.join(sorted(known)) or '(none)'}"
         )
-    return words(terms, selected, list(kind))
+    return words(lexicon, selected, list(kind))
 
 
 def main(
-    terms: Path,
+    lexicon: Lexicon,
     selected: list[str],
     *,
     kind: list[str] | None = None,
@@ -50,7 +51,7 @@ def main(
     output: Path | None = None,
 ) -> int:
     """Run `list` and print its record, as text or as JSON."""
-    table = run(terms, selected, kind=kind)
+    table = run(lexicon, selected, kind=kind)
     if as_json or output is not None:
         emit(table, output)
     elif kind:

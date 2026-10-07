@@ -13,7 +13,7 @@ answer and they sit on opposite sides of the delivery boundary:
 token. A delivered script may not import the library, so the shared answer belongs on the
 delivered side, and `lib/shared/` is where a leaf that more than one noun imports lives.
 
-Stdlib only, which is `lib/shared/`'s own admission rule.
+Stdlib only, which is `lib/shared/`'s own admission rule; the markdown reader is too.
 
 Complexity: O(n) in files reached, each read once.
 """
@@ -21,6 +21,21 @@ Complexity: O(n) in files reached, each read once.
 from __future__ import annotations
 
 from pathlib import Path
+
+from lib.shared import _markdown
+
+
+def imports(path: Path, root: Path) -> list[Path]:
+    """The files `path`'s own `@path` lines name, resolved against `root`, in file order.
+
+    Read through the markdown reader, so a `@` line in the frontmatter or inside a code
+    block is not an import: the instruction loader does not expand one there either.
+    """
+    return [
+        (root / line.text[1:].strip()).resolve()
+        for line in _markdown.read(path).text()
+        if line.text.startswith("@")
+    ]
 
 
 def closure(entry: Path, root: Path) -> tuple[set[Path], list[Path]]:
@@ -45,12 +60,7 @@ def closure(entry: Path, root: Path) -> tuple[set[Path], list[Path]]:
         if not current.is_file():
             broken.append(current)
             continue
-        for line in current.read_text(encoding="utf-8").splitlines():
-            if not line.startswith("@"):
-                continue
-            target = (root / line[1:].strip()).resolve()
-            if target not in seen:
-                stack.append(target)
+        stack += [target for target in imports(current, root) if target not in seen]
     return seen, broken
 
 
@@ -74,7 +84,5 @@ def import_edges(reached: set[Path], root: Path) -> tuple[tuple[str, str], ...]:
     for path in reached:
         if not path.is_file():
             continue
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.startswith("@"):
-                out.append((rel(path), rel((root / line[1:].strip()).resolve())))
+        out += [(rel(path), rel(target)) for target in imports(path, root)]
     return tuple(sorted(out))

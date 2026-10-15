@@ -13,6 +13,7 @@ from typing import Any, Callable
 import pytest
 from conftest import FakeServer
 
+from eninesites.lib import dryrun
 from eninesites.theme.custom import __main__ as cli
 from eninesites.theme.custom import api
 
@@ -58,7 +59,7 @@ def test_import_takes_back_an_export(server: FakeServer) -> None:
     server.add(
         "POST",
         "/api/v1/site/example.com/custom-themes/",
-        {"name": "mine", "theme": "c-1"},
+        {"name": "mine", "theme": "c-1", "active": True, "previous_theme": "bauhaus"},
     )
     result = api.import_custom(path=Path("theme.json"), parent="bauhaus")
     assert server.last.json() == {
@@ -68,4 +69,40 @@ def test_import_takes_back_an_export(server: FakeServer) -> None:
             "templates": {"home.html": "<h1>hi</h1>"},
         }
     }
-    assert result == {"domain": "example.com", "name": "mine", "theme": "c-1"}
+    assert result == {
+        "domain": "example.com",
+        "name": "mine",
+        "theme": "c-1",
+        "active": True,
+        "previous_theme": "bauhaus",
+    }
+
+
+def test_import_sends_activate_only_when_given(server: FakeServer) -> None:
+    server.add(
+        "POST",
+        "/api/v1/site/example.com/custom-themes/",
+        {"name": "mine", "theme": "c-1", "active": False, "previous_theme": "bauhaus"},
+    )
+    result = dryrun.done(
+        api.import_custom(path=Path("theme.json"), parent="bauhaus", activate="no")
+    )
+    assert server.last.json()["activate"] is False
+    assert (result["active"], result["previous_theme"]) == (False, "bauhaus")
+
+
+def test_import_refuses_an_activate_that_is_not_yes_or_no() -> None:
+    from eninesites.errors import ApiError  # pylint: disable=import-outside-toplevel
+
+    with pytest.raises(ApiError, match="--activate"):
+        api.import_custom(path=Path("theme.json"), parent="bauhaus", activate="maybe")
+
+
+def test_import_says_whether_the_theme_went_live(
+    server: FakeServer, run_cli: Callable[..., tuple[int, str, str]]
+) -> None:
+    path = "/api/v1/site/example.com/custom-themes/"
+    server.add("POST", path, {"theme": "c-1", "active": False, "previous_theme": None})
+    argv = ["import", "--path", "theme.json", "--parent", "bauhaus"]
+    code, out, _ = run_cli(cli.main, [*argv, "--activate", "false"])
+    assert code == 0 and "Live theme unchanged: none" in out

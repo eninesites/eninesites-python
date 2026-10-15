@@ -59,6 +59,7 @@ def _cmd_import(args: argparse.Namespace) -> int:
         base_url=args.base_url,
         project_name=args.project_name,
         path=args.path,
+        activate=args.activate,
         dry_run=args.dry_run,
     )
     return json_renderer.show(args, result, plaintext.print_import)
@@ -115,6 +116,9 @@ def parser() -> argparse.ArgumentParser:
         "--project-name", help="Config profile to use (default: default)"
     )
     p_import.add_argument("--path", type=Path, help="File to upload")
+    p_import.add_argument(
+        "--activate", help="Make it your site's active theme: true (default) or false"
+    )
     p_import.set_defaults(func=_cmd_import)
 
     for verb_parser in sub.choices.values():

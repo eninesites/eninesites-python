@@ -21,7 +21,7 @@ from pathlib import Path
 from eninesites.errors import ApiError
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
-from eninesites.lib.client.records import json_file, project
+from eninesites.lib.client.records import boolean, json_file, project
 from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import CustomTheme, ExportCustom, ImportCustom
@@ -59,13 +59,15 @@ def import_custom(
     base_url: str | None = None,
     project_name: str | None = None,
     path: Path | None = None,
+    activate: str | None = None,
     dry_run: bool = False,
 ) -> ImportCustom | PlannedRequest:
     """Import a custom theme from a JSON file: ``POST .../custom-themes/``.
 
     ``--path`` is either an export (``theme custom export --json`` output, or the bare
     ``{"custom_theme": ...}`` the server sends) or a ``{"<path>": "<source>"}`` map.
-    ``--name`` and ``--parent`` override the file's; both must end up set.
+    ``--name`` and ``--parent`` override the file's; both must end up set. Without
+    ``--activate`` the server's default holds: the imported theme becomes the live one.
     """
     theme: dict[str, object] = {}
     if path is not None:
@@ -84,15 +86,20 @@ def import_custom(
                 f"theme custom import: --{key} is required (or in the --path file)"
             )
     theme.setdefault("templates", {})
+    body: dict[str, object] = {"custom_theme": theme}
+    live = boolean(activate, "--activate")
+    if live is not None:
+        body["activate"] = live
     client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
-    payload = client.json(
-        "POST", client.site_path("custom-themes"), body={"custom_theme": theme}
-    )
+    payload = client.json("POST", client.site_path("custom-themes"), body=body)
     reply = payload if isinstance(payload, dict) else {}
+    previous = reply.get("previous_theme")
     return {
         "domain": credentials.require_site(client.settings),
         "name": str(reply.get("name", theme["name"])),
         "theme": str(reply.get("theme", "")),
+        "active": reply.get("active") is True,
+        "previous_theme": None if previous is None else str(previous),
     }
 
 

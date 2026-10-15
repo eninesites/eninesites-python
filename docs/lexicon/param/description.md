@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `description` means
+summary: "Describe the site you want (chat only)"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # description

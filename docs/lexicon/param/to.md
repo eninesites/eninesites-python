@@ -6,9 +6,9 @@ type: date
 required: true
 defined: false
 position: []
-summary: TODO — what `to` means
+summary: "Domain for the new copy of your site"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # to

@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `api-key` means
+summary: "Your API key (overrides the stored one)"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # api-key

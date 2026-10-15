@@ -4,9 +4,9 @@ kind: verb
 domain: [eninesites]
 params: [url, domain, api-key, base-url, project-name]
 invocations: [""]
-summary: TODO — what `inspect` means
+summary: "Show the JSON-LD emitted by one URL, or by every page of a site"
 pnode: [./README.md]
-bearing: draft
+bearing: contract
 ---
 
 # inspect

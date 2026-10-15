@@ -2,9 +2,9 @@
 name: artifact
 kind: noun
 domain: [eninesites]
-summary: TODO — what `artifact` means
+summary: "Manage your site content"
 pnode: [../README.md]
-bearing: draft
+bearing: contract
 ---
 
 # artifact

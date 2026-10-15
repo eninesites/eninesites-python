@@ -6,9 +6,9 @@ type: path
 required: false
 defined: false
 position: []
-summary: TODO — what `plan` means
+summary: "Subscription plan for your site (default: free)"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # plan

@@ -6,9 +6,9 @@ type: boolean
 required: false
 defined: false
 position: []
-summary: TODO — what `force` means
+summary: "Delete even if a site uses the theme (manage.py only)"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # force

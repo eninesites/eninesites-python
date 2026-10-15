@@ -4,9 +4,9 @@ kind: verb
 domain: [eninesites]
 params: [project-name, all, dry-run]
 invocations: [""]
-summary: TODO — what `logout` means
+summary: "Log out from the eninesites CLI"
 pnode: [./README.md]
-bearing: draft
+bearing: contract
 ---
 
 # logout

@@ -1,6 +1,6 @@
 """CLI entry: python -m eninesites.audit
 
-TODO — what `audit` means
+Audit your site for AEO + SEO compliance
 
 A thin surface over ``api``: each verb is one ``_cmd_<verb>`` that calls one api function
 and hands its result to a renderer. It decides nothing and prints nothing itself. Every
@@ -71,27 +71,35 @@ def parser() -> argparse.ArgumentParser:
     """Build the parser without parsing: the audit and --help both read this."""
     p = NounParser(
         prog="python -m eninesites.audit",
-        description="TODO — what `audit` means",
+        description="Audit your site for AEO + SEO compliance",
         nodes=commands(),
     )
     sub = p.verbs(subcommands(), dest="phase")
 
     p_run = sub.add_parser("run")
     p_run.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_run.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_run.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_run.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_run.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_run.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_run.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_run.set_defaults(func=_cmd_run)
 
     p_get = sub.add_parser("get")
     p_get.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_get.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_get.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_get.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_get.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_get.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_get.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_get.set_defaults(func=_cmd_get)
 
     for verb_parser in sub.choices.values():

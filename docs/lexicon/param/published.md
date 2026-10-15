@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `published` means
+summary: "Publish the content: true (default) or false"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # published

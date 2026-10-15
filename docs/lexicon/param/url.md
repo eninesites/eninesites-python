@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `url` means
+summary: "URL of the page to inspect"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # url

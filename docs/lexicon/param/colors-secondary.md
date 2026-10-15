@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `colors-secondary` means
+summary: "Secondary background color"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # colors-secondary

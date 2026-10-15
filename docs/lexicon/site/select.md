@@ -4,9 +4,9 @@ kind: verb
 domain: [eninesites]
 params: [domain, project-name, api-key, base-url, dry-run]
 invocations: [""]
-summary: TODO — what `select` means
+summary: "Set a default site, so you can leave out --domain"
 pnode: [./README.md]
-bearing: draft
+bearing: contract
 ---
 
 # select

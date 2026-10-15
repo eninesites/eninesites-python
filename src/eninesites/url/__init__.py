@@ -1,4 +1,4 @@
 """url: a namespace only; import ``api`` or ``lib``, no re-exports.
 
-TODO — what `url` means
+External URL catalog — the external sibling of Media
 """

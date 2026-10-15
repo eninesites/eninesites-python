@@ -6,9 +6,9 @@ type: boolean
 required: false
 defined: false
 position: []
-summary: TODO — what `all` means
+summary: "Log out of every profile"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # all

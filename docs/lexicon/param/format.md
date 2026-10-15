@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `format` means
+summary: "File format: json (default), yaml, csv, zip or media"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # format

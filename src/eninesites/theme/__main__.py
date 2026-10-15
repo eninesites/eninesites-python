@@ -1,6 +1,6 @@
 """CLI entry: python -m eninesites.theme
 
-TODO — what `theme` means
+List the themes your site can use
 
 A thin surface over ``api``: each verb is one ``_cmd_<verb>`` that calls one api function
 and hands its result to a renderer. It decides nothing and prints nothing itself. Every
@@ -31,7 +31,7 @@ from eninesites.theme.lib.renderer import plaintext
 def commands() -> list[tuple[str, str]]:
     """This node's sub-nouns, as (name, summary); its verbs are declared in subcommands()."""
     return [
-        ("custom", "TODO — what `custom` means"),
+        ("custom", "Export or import your site's custom theme"),
     ]
 
 
@@ -105,40 +105,52 @@ def parser() -> argparse.ArgumentParser:
     """Build the parser without parsing: the audit and --help both read this."""
     p = NounParser(
         prog="python -m eninesites.theme",
-        description="TODO — what `theme` means",
+        description="List the themes your site can use",
         nodes=commands(),
     )
     sub = p.verbs(subcommands(), dest="phase")
 
     p_create = sub.add_parser("create")
-    p_create.add_argument("--name", help="TODO — what `name` means")
+    p_create.add_argument(
+        "--name", help="Name of the site, theme, artifact, tag or URL"
+    )
     p_create.set_defaults(func=_cmd_create)
 
     p_list = sub.add_parser("list")
     p_list.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_list.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_list.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_list.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_list.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_list.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_list.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_list.set_defaults(func=_cmd_list)
 
     p_delete = sub.add_parser("delete")
-    p_delete.add_argument("--name", help="TODO — what `name` means")
     p_delete.add_argument(
-        "--force", action="store_true", help="TODO — what `force` means"
+        "--name", help="Name of the site, theme, artifact, tag or URL"
+    )
+    p_delete.add_argument(
+        "--force",
+        action="store_true",
+        help="Delete even if a site uses the theme (manage.py only)",
     )
     p_delete.set_defaults(func=_cmd_delete)
 
     p_check = sub.add_parser("check")
-    p_check.add_argument("--name", help="TODO — what `name` means")
+    p_check.add_argument("--name", help="Name of the site, theme, artifact, tag or URL")
     p_check.add_argument(
-        "--apply", action="store_true", help="TODO — what `apply` means"
+        "--apply", action="store_true", help="Fix what the check finds (manage.py only)"
     )
     p_check.set_defaults(func=_cmd_check)
 
     p_review = sub.add_parser("review")
-    p_review.add_argument("--name", help="TODO — what `name` means")
+    p_review.add_argument(
+        "--name", help="Name of the site, theme, artifact, tag or URL"
+    )
     p_review.set_defaults(func=_cmd_review)
 
     for verb_parser in sub.choices.values():

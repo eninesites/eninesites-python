@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `content` means
+summary: "Body text for your content"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # content

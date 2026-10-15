@@ -6,9 +6,9 @@ type: path
 required: false
 defined: false
 position: []
-summary: TODO — what `output` means
+summary: "Where to save the file (default: current folder)"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # output

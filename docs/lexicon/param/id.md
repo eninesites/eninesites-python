@@ -6,9 +6,9 @@ type: string
 required: true
 defined: false
 position: []
-summary: TODO — what `id` means
+summary: "Entry id, from the matching list command"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # id

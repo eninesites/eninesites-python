@@ -6,9 +6,9 @@ type: string
 required: true
 defined: false
 position: []
-summary: TODO — what `media` means
+summary: "Image to add, by its id from media list"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # media

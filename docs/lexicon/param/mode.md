@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `mode` means
+summary: "How to restore: merge (default), clobber or replace"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # mode

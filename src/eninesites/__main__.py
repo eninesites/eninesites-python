@@ -1,6 +1,6 @@
 """CLI entry: python -m eninesites
 
-TODO — what `eninesites` means
+Build and manage eninesites websites from the terminal
 
 The package's own command line: it lists the nouns this package composes in ``commands()``
 and runs the verbs declared on the package itself. Their code is ``eninesites.root``, so a root
@@ -35,16 +35,16 @@ from eninesites.schema import returns
 def commands() -> list[tuple[str, str]]:
     """This node's sub-nouns, as (name, summary); its verbs are declared in subcommands()."""
     return [
-        ("site", "TODO — what `site` means"),
-        ("theme", "TODO — what `theme` means"),
-        ("artifact", "TODO — what `artifact` means"),
-        ("tag", "TODO — what `tag` means"),
+        ("site", "Create/manage your site"),
+        ("theme", "List the themes your site can use"),
+        ("artifact", "Manage your site content"),
+        ("tag", "Manage tags for your site"),
         ("url", "External URL catalog — the external sibling of Media"),
         ("urlmap", "Custom URL mappings for artifacts"),
         ("media", "Media upload and management"),
         ("user", "Site user management"),
-        ("audit", "TODO — what `audit` means"),
-        ("aeo", "TODO — what `aeo` means"),
+        ("audit", "Audit your site for AEO + SEO compliance"),
+        ("aeo", "View the JSON-LD emitted by a page or the whole site"),
         ("seo", "SEO page management"),
     ]
 
@@ -88,9 +88,9 @@ def _cmd_describe(args: argparse.Namespace) -> int:
 def subcommands() -> list[tuple[str, str]]:
     """One (verb, summary) per verb: the one home of each verb's help text."""
     return [
-        ("login", "TODO — what `login` means"),
-        ("logout", "TODO — what `logout` means"),
-        ("config", "TODO — what `config` means"),
+        ("login", "Log in to the eninesites CLI with your API key"),
+        ("logout", "Log out from the eninesites CLI"),
+        ("config", "Show current eninesites CLI configuration"),
         ("describe", "Every command, its flags and its output schema, as data"),
     ]
 
@@ -99,28 +99,38 @@ def parser() -> argparse.ArgumentParser:
     """Build the parser without parsing: the audit and --help both read this."""
     p = NounParser(
         prog="python -m eninesites",
-        description="TODO — what `eninesites` means",
+        description="Build and manage eninesites websites from the terminal",
         nodes=commands(),
     )
     sub = p.verbs(subcommands(), dest="phase")
 
     p_login = sub.add_parser("login")
-    p_login.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_login.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_login.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_login.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_login.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_login.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_login.set_defaults(func=_cmd_login)
 
     p_logout = sub.add_parser("logout")
-    p_logout.add_argument("--project-name", help="TODO — what `project-name` means")
     p_logout.add_argument(
-        "--all", dest="all_", action="store_true", help="TODO — what `all` means"
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_logout.add_argument(
+        "--all", dest="all_", action="store_true", help="Log out of every profile"
     )
     p_logout.set_defaults(func=_cmd_logout)
 
     p_config = sub.add_parser("config")
-    p_config.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_config.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_config.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_config.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_config.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_config.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_config.set_defaults(func=_cmd_config)
 
     p_describe = sub.add_parser("describe")

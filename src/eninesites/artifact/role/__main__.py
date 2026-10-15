@@ -1,6 +1,7 @@
 """CLI entry: python -m eninesites.artifact.role
 
-TODO — what `role` means
+Assign roles to content for AEO (Article, FAQ, Organization, Person, Place, Product,
+Review, Service)
 
 A thin surface over ``api``: each verb is one ``_cmd_<verb>`` that calls one api function
 and hands its result to a renderer. It decides nothing and prints nothing itself. Every
@@ -97,7 +98,7 @@ def subcommands() -> list[tuple[str, str]]:
             "Replace the artifact's role set wholesale (idempotent; [] clears)",
         ),
         ("assign", "Add a single role to the artifact (idempotent)"),
-        ("unassign", "TODO — what `unassign` means"),
+        ("unassign", "Remove one AEO role from an artifact"),
     ]
 
 
@@ -105,7 +106,10 @@ def parser() -> argparse.ArgumentParser:
     """Build the parser without parsing: the audit and --help both read this."""
     p = NounParser(
         prog="python -m eninesites.artifact.role",
-        description="TODO — what `role` means",
+        description=(
+            "Assign roles to content for AEO (Article, FAQ, Organization, "
+            "Person, Place, Product, Review, Service)"
+        ),
         nodes=commands(),
     )
     sub = p.verbs(subcommands(), dest="phase")
@@ -114,59 +118,87 @@ def parser() -> argparse.ArgumentParser:
     p_list.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
     p_list.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_list.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_list.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_list.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_list.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_list.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_list.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_list.set_defaults(func=_cmd_list)
 
     p_replace = sub.add_parser("replace")
     p_replace.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
-    p_replace.add_argument("--role", required=True, help="TODO — what `role` means")
     p_replace.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--role",
+        required=True,
+        help="AEO role code for content, or admin/editor/reader for users",
     )
-    p_replace.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_replace.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_replace.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_replace.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_replace.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_replace.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_replace.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_replace.set_defaults(func=_cmd_replace)
 
     p_assign = sub.add_parser("assign")
     p_assign.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
-    p_assign.add_argument("--role", required=True, help="TODO — what `role` means")
     p_assign.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--role",
+        required=True,
+        help="AEO role code for content, or admin/editor/reader for users",
     )
-    p_assign.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_assign.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_assign.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_assign.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_assign.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_assign.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_assign.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_assign.set_defaults(func=_cmd_assign)
 
     p_unassign = sub.add_parser("unassign")
     p_unassign.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
-    p_unassign.add_argument("--role", required=True, help="TODO — what `role` means")
     p_unassign.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--role",
+        required=True,
+        help="AEO role code for content, or admin/editor/reader for users",
     )
-    p_unassign.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_unassign.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_unassign.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_unassign.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_unassign.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_unassign.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_unassign.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_unassign.set_defaults(func=_cmd_unassign)
 
     for verb_parser in sub.choices.values():

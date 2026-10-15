@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `pnode` means
+summary: "Parent content, by name or slug (default: top level)"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # pnode

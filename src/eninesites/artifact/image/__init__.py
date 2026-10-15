@@ -1,4 +1,4 @@
 """artifact.image: a namespace only; import ``api`` or ``lib``, no re-exports.
 
-TODO — what `image` means
+Manage the media gallery for your artifacts
 """

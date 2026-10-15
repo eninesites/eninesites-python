@@ -24,7 +24,7 @@ from eninesites.lib.jsonvalue import Json, JsonObject
 P = ParamSpec("P")
 R = TypeVar("R")
 
-FLAG_HELP = "Show what would be sent or written, and change nothing."
+FLAG_HELP = "Show what would be sent or written, and change nothing"
 
 
 class PlannedRequest(TypedDict):

@@ -1,6 +1,6 @@
 """CLI entry: python -m eninesites.aeo
 
-TODO — what `aeo` means
+View the JSON-LD emitted by a page or the whole site
 
 A thin surface over ``api``: each verb is one ``_cmd_<verb>`` that calls one api function
 and hands its result to a renderer. It decides nothing and prints nothing itself. Every
@@ -51,7 +51,7 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
 def subcommands() -> list[tuple[str, str]]:
     """One (verb, summary) per verb: the one home of each verb's help text."""
     return [
-        ("inspect", "TODO — what `inspect` means"),
+        ("inspect", "Show the JSON-LD emitted by one URL, or by every page of a site"),
     ]
 
 
@@ -59,19 +59,23 @@ def parser() -> argparse.ArgumentParser:
     """Build the parser without parsing: the audit and --help both read this."""
     p = NounParser(
         prog="python -m eninesites.aeo",
-        description="TODO — what `aeo` means",
+        description="View the JSON-LD emitted by a page or the whole site",
         nodes=commands(),
     )
     sub = p.verbs(subcommands(), dest="phase")
 
     p_inspect = sub.add_parser("inspect")
-    p_inspect.add_argument("--url", help="TODO — what `url` means")
+    p_inspect.add_argument("--url", help="URL of the page to inspect")
     p_inspect.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_inspect.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_inspect.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_inspect.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_inspect.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_inspect.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_inspect.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_inspect.set_defaults(func=_cmd_inspect)
 
     for verb_parser in sub.choices.values():

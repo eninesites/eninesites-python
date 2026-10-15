@@ -6,9 +6,9 @@ type: string
 required: true
 defined: false
 position: []
-summary: TODO — what `files` means
+summary: "Files to upload, comma-separated"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # files

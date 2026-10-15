@@ -32,6 +32,11 @@ All notable changes to this project are documented in this file. The format is b
 - racecar's delivered files synced to `ccd3547`; `pylint` pinned to 4.0.9, the version racecar
   lints its delivered files under.
 
+- Every noun, verb and flag has real help text in `--help` and `describe`, in place of
+  `TODO — what X means`. Each text is its word's summary in `docs/lexicon/`, and a test fails
+  when the two differ. `--domain`, `--slug` and `--json` are reworded: `--slug` said "artifact"
+  where it also names a media item or a tag.
+
 ### Removed
 
 - The `page` and `chat` nouns (`page crawl`, `chat stream`, `chat magic-link`). Every verb on

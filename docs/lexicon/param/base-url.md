@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `base-url` means
+summary: "Server to talk to (default: https://eninesites.com)"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # base-url

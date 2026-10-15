@@ -2,9 +2,9 @@
 name: audit
 kind: noun
 domain: [eninesites]
-summary: TODO — what `audit` means
+summary: "Audit your site for AEO + SEO compliance"
 pnode: [../README.md]
-bearing: draft
+bearing: contract
 ---
 
 # audit

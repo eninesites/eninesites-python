@@ -2,9 +2,9 @@
 name: custom
 kind: noun
 domain: [eninesites]
-summary: TODO — what `custom` means
+summary: "Export or import your site's custom theme"
 pnode: [../README.md]
-bearing: draft
+bearing: contract
 ---
 
 # custom

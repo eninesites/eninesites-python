@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `parent` means
+summary: "Built-in theme your custom theme is based on"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # parent

@@ -29,7 +29,6 @@ from eninesites.lib.client.records import (
     json_file,
     merged,
     not_over_rest,
-    refuse_unsupported,
     rows,
 )
 from eninesites.lib.dryrun import PlannedRequest, writes
@@ -69,13 +68,11 @@ RESTORE_MODES = ("merge", "clobber", "replace")
 def create_site(
     *,
     name: str | None = None,
-    user: str | None = None,
     domain: str | None = None,
     email: str | None = None,
     phone: str | None = None,
     theme: str | None = None,
     plan: Path | None = None,
-    sample: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
@@ -88,12 +85,6 @@ def create_site(
     subdomain. ``--data`` carries any other body field (``config``, ``colors``, ``content``,
     ``template``); the named flags override it.
     """
-    refuse_unsupported(
-        "site create",
-        "the server makes the caller the owner, and sample content is a manage.py option",
-        user=user,
-        sample=sample,
-    )
     body = merged(
         data,
         domain=domain,
@@ -182,9 +173,6 @@ def _source(path: Path | None, verb: str, kinds: str) -> Path:
 def load_site(
     *,
     domain: str | None = None,
-    name: str | None = None,
-    user: str | None = None,
-    email: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
@@ -196,14 +184,6 @@ def load_site(
     An upsert, not a replace (``docs/API.md``, "Import is an upsert"). Creating a new site
     from a file is ``manage.py site --load``; over REST, create the site first.
     """
-    refuse_unsupported(
-        "site load",
-        "they create a new site, which only manage.py site --load does; "
-        "create the site with `site create`, then load into it",
-        name=name,
-        user=user,
-        email=email,
-    )
     source = _source(path, "site load", ".json, .yml, .yaml or .csv")
     suffix = source.suffix.lower()
     if suffix not in LOAD_SUFFIXES:
@@ -220,9 +200,6 @@ def restore_site(
     *,
     mode: str | None = None,
     domain: str | None = None,
-    name: str | None = None,
-    user: str | None = None,
-    plan: Path | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
@@ -235,13 +212,6 @@ def restore_site(
     it carries, ``replace`` wipes the site's content and media first. Restoring into a
     fresh site is ``manage.py site --load x.zip``.
     """
-    refuse_unsupported(
-        "site restore",
-        "restoring into a fresh site is manage.py only; restore over an existing --domain",
-        name=name,
-        user=user,
-        plan=plan,
-    )
     chosen = (mode or "merge").lower()
     if chosen not in RESTORE_MODES:
         raise ApiError(f"--mode {chosen!r}: expected one of {', '.join(RESTORE_MODES)}")
@@ -261,7 +231,6 @@ def copy_site(
     *,
     domain: str | None = None,
     to: str | None = None,
-    user: str | None = None,
     name: str | None = None,
     plan: Path | None = None,
     api_key: str | None = None,
@@ -270,7 +239,6 @@ def copy_site(
     dry_run: bool = False,
 ) -> CopySite | PlannedRequest:
     """Copy a site losslessly into a new domain: ``POST /api/v1/site/<d>/copy/``."""
-    refuse_unsupported("site copy", "the copy is owned by the caller", user=user)
     if not to:
         raise ApiError("site copy: --to <new-domain> is required")
     client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)

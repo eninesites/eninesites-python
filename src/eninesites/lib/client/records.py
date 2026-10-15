@@ -123,15 +123,6 @@ def integer(value: str | int | None, flag: str) -> int | None:
         raise ApiError(f"{flag} {value!r}: expected a whole number") from exc
 
 
-def refuse_unsupported(verb: str, why: str, **given: Any) -> None:
-    """Refuse a flag the REST endpoint cannot honour, rather than drop it silently."""
-    named = [f"--{k.rstrip('_').replace('_', '-')}" for k, v in given.items() if v]
-    if named:
-        raise ApiError(
-            f"{verb}: {', '.join(named)} not accepted over the REST API: {why}"
-        )
-
-
 def not_over_rest(verb: str, where: str) -> ApiError:
     """The refusal for a verb the eninesites REST API has no endpoint for."""
     return ApiError(

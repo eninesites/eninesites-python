@@ -39,6 +39,11 @@ All notable changes to this project are documented in this file. The format is b
   endpoints accept a browser session, never an API key. They no longer appear in the command
   listing or in `describe`.
 
+- Flags that only the server's own `manage.py` takes, and that every command here refused:
+  `site create --user --sample`, `site load --name --user --email`,
+  `site restore --name --user --plan`, `site copy --user` and `audit run --limit`. Passing one
+  now reads as an unknown flag.
+
 ### Fixed
 
 - The SEO page commands work, as `python -m eninesites.seo`: the noun was `seo-page`, which

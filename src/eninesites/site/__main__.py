@@ -42,13 +42,11 @@ def _print_commands() -> None:
 def _cmd_create(args: argparse.Namespace) -> int:
     result = api.create_site(
         name=args.name,
-        user=args.user,
         domain=args.domain,
         email=args.email,
         phone=args.phone,
         theme=args.theme,
         plan=args.plan,
-        sample=args.sample,
         api_key=args.api_key,
         base_url=args.base_url,
         project_name=args.project_name,
@@ -80,9 +78,6 @@ def _cmd_dump(args: argparse.Namespace) -> int:
 def _cmd_load(args: argparse.Namespace) -> int:
     result = api.load_site(
         domain=args.domain,
-        name=args.name,
-        user=args.user,
-        email=args.email,
         api_key=args.api_key,
         base_url=args.base_url,
         project_name=args.project_name,
@@ -96,9 +91,6 @@ def _cmd_restore(args: argparse.Namespace) -> int:
     result = api.restore_site(
         mode=args.mode,
         domain=args.domain,
-        name=args.name,
-        user=args.user,
-        plan=args.plan,
         api_key=args.api_key,
         base_url=args.base_url,
         project_name=args.project_name,
@@ -112,7 +104,6 @@ def _cmd_copy(args: argparse.Namespace) -> int:
     result = api.copy_site(
         domain=args.domain,
         to=args.to,
-        user=args.user,
         name=args.name,
         plan=args.plan,
         api_key=args.api_key,
@@ -268,7 +259,6 @@ def parser() -> argparse.ArgumentParser:  # pylint: disable=too-many-statements
 
     p_create = sub.add_parser("create")
     p_create.add_argument("--name", help="TODO — what `name` means")
-    p_create.add_argument("--user", help="TODO — what `user` means")
     p_create.add_argument(
         "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
     )
@@ -276,7 +266,6 @@ def parser() -> argparse.ArgumentParser:  # pylint: disable=too-many-statements
     p_create.add_argument("--phone", help="TODO — what `phone` means")
     p_create.add_argument("--theme", help="TODO — what `theme` means")
     p_create.add_argument("--plan", type=Path, help="TODO — what `plan` means")
-    p_create.add_argument("--sample", help="TODO — what `sample` means")
     p_create.add_argument("--api-key", help="TODO — what `api-key` means")
     p_create.add_argument("--base-url", help="TODO — what `base-url` means")
     p_create.add_argument("--project-name", help="TODO — what `project-name` means")
@@ -306,9 +295,6 @@ def parser() -> argparse.ArgumentParser:  # pylint: disable=too-many-statements
     p_load.add_argument(
         "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
     )
-    p_load.add_argument("--name", help="TODO — what `name` means")
-    p_load.add_argument("--user", help="TODO — what `user` means")
-    p_load.add_argument("--email", help="TODO — what `email` means")
     p_load.add_argument("--api-key", help="TODO — what `api-key` means")
     p_load.add_argument("--base-url", help="TODO — what `base-url` means")
     p_load.add_argument("--project-name", help="TODO — what `project-name` means")
@@ -320,9 +306,6 @@ def parser() -> argparse.ArgumentParser:  # pylint: disable=too-many-statements
     p_restore.add_argument(
         "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
     )
-    p_restore.add_argument("--name", help="TODO — what `name` means")
-    p_restore.add_argument("--user", help="TODO — what `user` means")
-    p_restore.add_argument("--plan", type=Path, help="TODO — what `plan` means")
     p_restore.add_argument("--api-key", help="TODO — what `api-key` means")
     p_restore.add_argument("--base-url", help="TODO — what `base-url` means")
     p_restore.add_argument("--project-name", help="TODO — what `project-name` means")
@@ -334,7 +317,6 @@ def parser() -> argparse.ArgumentParser:  # pylint: disable=too-many-statements
         "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
     )
     p_copy.add_argument("--to", required=True, help="TODO — what `to` means")
-    p_copy.add_argument("--user", help="TODO — what `user` means")
     p_copy.add_argument("--name", help="TODO — what `name` means")
     p_copy.add_argument("--plan", type=Path, help="TODO — what `plan` means")
     p_copy.add_argument("--api-key", help="TODO — what `api-key` means")

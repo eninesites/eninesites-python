@@ -41,7 +41,6 @@ def _print_commands() -> None:
 def _cmd_run(args: argparse.Namespace) -> int:
     result = api.run_audit(
         domain=args.domain,
-        limit=args.limit,
         api_key=args.api_key,
         base_url=args.base_url,
         project_name=args.project_name,
@@ -81,7 +80,6 @@ def parser() -> argparse.ArgumentParser:
     p_run.add_argument(
         "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
     )
-    p_run.add_argument("--limit", help="TODO — what `limit` means")
     p_run.add_argument("--api-key", help="TODO — what `api-key` means")
     p_run.add_argument("--base-url", help="TODO — what `base-url` means")
     p_run.add_argument("--project-name", help="TODO — what `project-name` means")

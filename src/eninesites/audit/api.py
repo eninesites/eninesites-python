@@ -20,7 +20,7 @@ from typing import Any
 
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import Client, connect, segment
-from eninesites.lib.client.records import project, refuse_unsupported, rows
+from eninesites.lib.client.records import project, rows
 from eninesites.lib.dryrun import PlannedRequest, writes
 
 from .lib.results import AuditUrl, GetAudit, RunAudit
@@ -40,14 +40,12 @@ def _data(payload: Any) -> Any:
 def run_audit(
     *,
     domain: str | None = None,
-    limit: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
     dry_run: bool = False,
 ) -> RunAudit | PlannedRequest:
     """Run and store a full XEO audit of the site: ``POST .../xeo-audit/``."""
-    refuse_unsupported("audit run", "the server audits every sitemap URL", limit=limit)
     client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     _, path = _manager_path(client, "xeo-audit")
     result: RunAudit = project(_data(client.json("POST", path)), RunAudit)

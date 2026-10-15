@@ -79,11 +79,7 @@ def test_site_verbs_send_the_documented_request(verb: str, server: FakeServer) -
 # -- site specifics ---------------------------------------------------------------------
 
 
-def test_create_sends_the_theme_as_config_and_refuses_a_user(
-    server: FakeServer,
-) -> None:
-    from eninesites.errors import ApiError  # pylint: disable=import-outside-toplevel
-
+def test_create_sends_the_theme_as_config(server: FakeServer) -> None:
     server.add("POST", "/api/v1/site/", {"domain": "acme.example"}, status=201)
     assert api.create_site(**SAMPLES["create"]) == {"domain": "acme.example"}
     assert server.last.json() == {
@@ -92,8 +88,6 @@ def test_create_sends_the_theme_as_config_and_refuses_a_user(
         "plan": "free",
         "config": {"theme": {"name": "bauhaus", "path": "bauhaus/templates"}},
     }
-    with pytest.raises(ApiError, match="--user not accepted"):
-        api.create_site(name="x", user="a@b.example")
 
 
 def test_dump_saves_under_the_servers_file_name(server: FakeServer) -> None:
@@ -212,3 +206,26 @@ def test_the_cli_sends_the_path_and_has_no_file_switch(
     code, out, err = run_cli(cli.main, ["load", "--file"])
     assert (code, out) == (2, "")
     assert "unrecognized arguments: --file" in err
+
+
+# The flags of the server's manage.py commands, which no REST endpoint takes.
+NOT_OVER_REST_FLAGS: list[tuple[str, str]] = [
+    ("create", "--user"),
+    ("create", "--sample"),
+    ("load", "--name"),
+    ("load", "--user"),
+    ("load", "--email"),
+    ("restore", "--name"),
+    ("restore", "--user"),
+    ("restore", "--plan"),
+    ("copy", "--user"),
+]
+
+
+@pytest.mark.parametrize("verb,flag", NOT_OVER_REST_FLAGS)
+def test_a_flag_no_endpoint_takes_is_not_offered(
+    verb: str, flag: str, run_cli: Callable[..., tuple[int, str, str]]
+) -> None:
+    code, out, err = run_cli(cli.main, [verb, flag, "x"])
+    assert (code, out) == (2, "")
+    assert f"unrecognized arguments: {flag} x" in err

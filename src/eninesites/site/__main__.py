@@ -198,7 +198,7 @@ def subcommands() -> list[tuple[str, str]]:
         ("list", "List sites accessible to the authenticated user"),
         ("dump", "Export site data as JSON, YAML, CSV, zip, or media zip"),
         ("load", "Import/upsert content into existing site"),
-        ("restore", "Import/upsert content into existing site"),
+        ("restore", "Restore your site from a .zip backup (merge, clobber or replace)"),
         ("copy", "Duplicate the site into a new domain"),
         (
             "configure",

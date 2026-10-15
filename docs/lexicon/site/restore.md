@@ -4,9 +4,9 @@ kind: verb
 domain: [eninesites]
 params: [mode, domain, api-key, base-url, project-name, path, dry-run]
 invocations: [""]
-summary: "Import/upsert content into existing site"
+summary: "Restore your site from a .zip backup (merge, clobber or replace)"
 pnode: [./README.md]
-bearing: draft
+bearing: contract
 ---
 
 # restore

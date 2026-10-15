@@ -51,6 +51,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- `site restore` describes itself as restoring a .zip backup; its help repeated `site load`'s.
+
 - The SEO page commands work, as `python -m eninesites.seo`: the noun was `seo-page`, which
   racecar built as an unimportable package.
 

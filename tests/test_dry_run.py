@@ -92,14 +92,14 @@ def not_available(node: ModuleType, verb: str) -> bool:
 
 
 def test_the_marked_verbs_are_the_write_rows() -> None:
-    """``dryrun.writes`` and ``surface.jsonl`` name the same 51 verbs: one cannot drift."""
+    """``dryrun.writes`` and ``surface.jsonl`` name the same 49 verbs: one cannot drift."""
     marked = set()
     for row in ROWS:
         node, argv = command(row)
         if dryrun.is_write(node.api.VERBS[argv[0]]):
             marked.add(row["id"])
     assert marked == {row["id"] for row in WRITES}
-    assert len(marked) == 51
+    assert len(marked) == 49
 
 
 @pytest.mark.parametrize("row", WRITES, ids=[row["id"] for row in WRITES])

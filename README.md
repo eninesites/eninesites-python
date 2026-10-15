@@ -164,9 +164,7 @@ Exit codes: 0 done, 1 ran and found something to report, 2 could not run.
 | `artifact.role` | assign, list, replace, unassign |
 | `artifact.tag` | attach, detach, list |
 | `audit` | get, run |
-| `chat` | magic-link, stream |
 | `media` | delete, get, list, update, upload |
-| `page` | crawl |
 | `seo` | create, delete, get, list, update |
 | `site` | build, check, configure, copy, create, delete, dump, list, load, propose, randomize-subdomain, restore, review, select |
 | `tag` | create, delete, get, list, update |
@@ -180,9 +178,8 @@ Exit codes: 0 done, 1 ran and found something to report, 2 could not run.
 
 These commands are declared but the eninesites REST API has no endpoint for them; each exits
 2 with a message naming where the operation lives instead: `site delete`, `site check`,
-`site review` and `theme create|delete|check|review` (server `manage.py` commands),
-`site propose`, `site build` and `page crawl` (chat tools), and `chat stream` and
-`chat magic-link` (browser-session endpoints).
+`site review` and `theme create|delete|check|review` (server `manage.py` commands), and
+`site propose` and `site build` (chat tools).
 
 ## Documentation
 

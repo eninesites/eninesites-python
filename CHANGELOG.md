@@ -32,6 +32,13 @@ All notable changes to this project are documented in this file. The format is b
 - racecar's delivered files synced to `ccd3547`; `pylint` pinned to 4.0.9, the version racecar
   lints its delivered files under.
 
+### Removed
+
+- The `page` and `chat` nouns (`page crawl`, `chat stream`, `chat magic-link`). Every verb on
+  them only refused: crawling a page is a server chat tool with no REST endpoint, and the chat
+  endpoints accept a browser session, never an API key. They no longer appear in the command
+  listing or in `describe`.
+
 ### Fixed
 
 - The SEO page commands work, as `python -m eninesites.seo`: the noun was `seo-page`, which

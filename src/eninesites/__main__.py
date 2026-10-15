@@ -45,8 +45,6 @@ def commands() -> list[tuple[str, str]]:
         ("user", "Site user management"),
         ("audit", "TODO — what `audit` means"),
         ("aeo", "TODO — what `aeo` means"),
-        ("page", "TODO — what `page` means"),
-        ("chat", "TODO — what `chat` means"),
         ("seo", "SEO page management"),
     ]
 

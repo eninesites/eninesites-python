@@ -44,6 +44,7 @@ def commands() -> list[tuple[str, str]]:
         ("map", "Artifact cross-references"),
         ("tag", "Add/remove tags for your artifacts"),
         ("image", "Manage the media gallery for your artifacts"),
+        ("url", "Add/remove external URLs for your artifacts"),
     ]
 
 

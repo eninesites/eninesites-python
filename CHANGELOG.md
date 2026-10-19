@@ -12,6 +12,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
+- `artifact.url list|attach|get|update|detach`: an item's external URLs, in order. `attach
+  --name` links a saved URL (`url list`), with `--order` to place it; `update --data` reorders
+  it or points it at another saved URL; `detach` leaves the saved URL in the catalog.
+
 - `url list --url <address>` finds the saved URL an address already is, matched the way the
   catalog dedupes, so a link can be found before `artifact.url attach` uses it.
 

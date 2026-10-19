@@ -17,7 +17,7 @@ same work runs from a script or a cron job as easily as by hand.
 **The CLI covers:**
 
 - Sites: create, list, copy, configure, dump, load and restore
-- Content: artifacts and their roles, maps, tags, images, design and AEO data
+- Content: artifacts and their roles, maps, tags, images, external URLs, design and AEO data
 - Tags, external URLs, URL maps, media and site users
 - Themes and custom themes
 - The subscription plans you can create a site on
@@ -164,6 +164,7 @@ Exit codes: 0 done, 1 ran and found something to report, 2 could not run.
 | `artifact.map` | candidates, create, delete, get, list, update |
 | `artifact.role` | assign, list, replace, unassign |
 | `artifact.tag` | attach, detach, list |
+| `artifact.url` | attach, detach, get, list, update |
 | `audit` | get, run |
 | `media` | delete, get, list, update, upload |
 | `plan` | list |

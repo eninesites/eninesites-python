@@ -12,6 +12,9 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
+- `url list --url <address>` finds the saved URL an address already is, matched the way the
+  catalog dedupes, so a link can be found before `artifact.url attach` uses it.
+
 - `python -m eninesites.plan list`: the subscription plans you can create a site on, cheapest
   first. Each slug is a value `site create --plan` and `site copy --plan` accept.
 

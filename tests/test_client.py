@@ -286,6 +286,18 @@ def test_list_all_follows_pages_until_next_is_null(server: FakeServer) -> None:
     assert server.calls[0].query["page_size"] == ["200"]
 
 
+def test_list_all_sends_a_filter_on_every_page(server: FakeServer) -> None:
+    path = f"/api/v1/site/{SITE}/urls/"
+    server.add("GET", path, {"next": "p2", "results": [{"id": 1}]})
+    server.add("GET", path, {"next": None, "results": []})
+    client = http.connect()
+    assert client.list_all(client.site_path("urls"), {"url": "https://a.example/"}) == [
+        {"id": 1}
+    ]
+    assert [c.query["url"] for c in server.calls] == [["https://a.example/"]] * 2
+    assert [c.query["page"] for c in server.calls] == [["1"], ["2"]]
+
+
 def test_list_all_accepts_a_bare_array(server: FakeServer) -> None:
     server.add("GET", "/api/v1/site/", [{"domain": "a"}])
     assert http.connect().list_all("/api/v1/site/") == [{"domain": "a"}]

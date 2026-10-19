@@ -33,13 +33,19 @@ NAME = "the catalog entry's name, from `url list`"
 def list_url(
     *,
     domain: str | None = None,
+    url: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
 ) -> ListUrl:
-    """The site's external URL catalog: ``GET .../urls/`` (all pages)."""
+    """The site's external URL catalog: ``GET .../urls/`` (all pages).
+
+    ``--url`` keeps only the entry that address already is, matched as the catalog dedupes
+    (``?url=``), so an agent can find a saved URL before attaching it to an artifact.
+    """
     client = connect(api_key, base_url, project_name, domain)
-    found = rows(client.list_all(client.site_path("urls")), UrlRow)
+    query: dict[str, str | int] | None = {"url": url} if url else None
+    found = rows(client.list_all(client.site_path("urls"), query), UrlRow)
     return {"count": len(found), "results": found}
 
 

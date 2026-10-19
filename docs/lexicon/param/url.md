@@ -6,7 +6,7 @@ type: string
 required: false
 defined: false
 position: []
-summary: "URL of the page to inspect"
+summary: "A full URL: the page to inspect, or the saved URL to find"
 pnode: [README.md]
 bearing: contract
 ---

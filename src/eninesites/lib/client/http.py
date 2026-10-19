@@ -236,15 +236,20 @@ class Client:
         """GET one resource as decoded JSON."""
         return self.json("GET", path, query=query)
 
-    def list_all(self, path: str) -> list[Any]:
+    def list_all(
+        self, path: str, query: dict[str, str | int] | None = None
+    ) -> list[Any]:
         """Every row of a list endpoint, following pages until ``next`` is null.
 
         Tolerates both shapes ``docs/API.md`` documents: the paginated envelope and the
-        bare array several endpoints return.
+        bare array several endpoints return. ``query`` is a filter the endpoint takes; it is
+        sent on every page, beside the paging parameters.
         """
         rows: list[Any] = []
         for page in range(1, MAX_PAGES + 1):
-            payload = self.get(path, {"page": page, "page_size": PAGE_SIZE})
+            payload = self.get(
+                path, {**(query or {}), "page": page, "page_size": PAGE_SIZE}
+            )
             if isinstance(payload, list):
                 return rows + payload
             if not isinstance(payload, dict):

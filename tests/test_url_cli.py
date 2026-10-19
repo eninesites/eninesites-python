@@ -56,3 +56,15 @@ def test_url_verbs_send_the_documented_request(verb: str, server: FakeServer) ->
     method, path = ROUTES[verb]
     sent = server.calls[0]
     assert (sent.method, sent.path) == (method, path)
+
+
+def test_list_finds_the_entry_an_address_already_is(server: FakeServer) -> None:
+    path = "/api/v1/site/example.com/urls/"
+    server.add("GET", path, {"next": None, "results": [{"name": "docs"}]})
+    assert api.list_url(url="https://docs.example/")["count"] == 1
+    assert server.last.query["url"] == ["https://docs.example/"]
+
+
+def test_list_without_url_sends_no_filter(server: FakeServer) -> None:
+    api.list_url()
+    assert "url" not in server.last.query

@@ -65,7 +65,9 @@ def parser() -> argparse.ArgumentParser:
     sub = p.verbs(subcommands(), dest="phase")
 
     p_inspect = sub.add_parser("inspect")
-    p_inspect.add_argument("--url", help="URL of the page to inspect")
+    p_inspect.add_argument(
+        "--url", help="A full URL: the page to inspect, or the saved URL to find"
+    )
     p_inspect.add_argument(
         "--domain", help="Your site's domain (overrides the one set by site select)"
     )

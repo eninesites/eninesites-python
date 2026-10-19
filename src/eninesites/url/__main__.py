@@ -42,6 +42,7 @@ def _print_commands() -> None:
 def _cmd_list(args: argparse.Namespace) -> int:
     result = api.list_url(
         domain=args.domain,
+        url=args.url,
         api_key=args.api_key,
         base_url=args.base_url,
         project_name=args.project_name,
@@ -120,6 +121,9 @@ def parser() -> argparse.ArgumentParser:
     p_list = sub.add_parser("list")
     p_list.add_argument(
         "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_list.add_argument(
+        "--url", help="A full URL: the page to inspect, or the saved URL to find"
     )
     p_list.add_argument("--api-key", help="Your API key (overrides the stored one)")
     p_list.add_argument(

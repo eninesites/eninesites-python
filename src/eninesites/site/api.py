@@ -51,17 +51,8 @@ from .lib.results import (
     SiteRow,
 )
 
-#: ``?dl=`` formats ``SiteDetailView.get`` serves, and the extension each is saved under.
-DUMP_FORMATS = {
-    "json": "json",
-    "yaml": "yaml",
-    "csv": "csv",
-    "zip": "zip",
-    "media": "zip",
-}
-#: What ``POST /api/v1/site/<d>/`` parses as an upsert; a .zip is ``site restore``.
-LOAD_SUFFIXES = (".json", ".yml", ".yaml", ".csv")
-RESTORE_MODES = ("merge", "clobber", "replace")
+#: ``?dl=`` formats ``SiteDetailView.get`` serves; each is saved under its own extension.
+DUMP_FORMATS = ("json", "zip")
 
 
 @writes
@@ -126,9 +117,10 @@ def dump_site(
 ) -> DumpSite:
     """Save the site's export to a file: ``GET /api/v1/site/<d>/?dl=<format>``.
 
-    Formats: json (default), yaml, csv, zip (the portable archive ``site restore`` takes
-    back) and media. The file is named by ``--output`` (a file, or a directory to put it
-    in), else by the server's ``Content-Disposition``; an existing file is replaced.
+    Formats: json (default; the site's data without its media, which ``site load`` takes
+    back) and zip (the backup: the data and every media file, which ``site restore`` takes
+    back). The file is named by ``--output`` (a file, or a directory to put it in), else by
+    the server's ``Content-Disposition``; an existing file is replaced.
     """
     fmt = (format_ or "json").lower()
     if fmt not in DUMP_FORMATS:
@@ -136,7 +128,7 @@ def dump_site(
     client = connect(api_key, base_url, project_name, domain)
     reply = client.request("GET", client.site_path(), query={"dl": fmt})
     site = credentials.require_site(client.settings)
-    name = filename_from(reply) or f"{site}.{DUMP_FORMATS[fmt]}"
+    name = filename_from(reply) or f"{site}.{fmt}"
     target = Path(output).expanduser() if output else Path(name)
     if target.is_dir():
         target = target / name
@@ -179,18 +171,19 @@ def load_site(
     path: Path | None = None,
     dry_run: bool = False,
 ) -> LoadSite | PlannedRequest:
-    """Upsert a .json/.yml/.yaml/.csv file into an existing site: ``POST /api/v1/site/<d>/``.
+    """Replace the site's content with a JSON export: ``POST /api/v1/site/<d>/``, JSON body.
 
-    An upsert, not a replace (``docs/API.md``, "Import is an upsert"). Creating a new site
-    from a file is ``manage.py site --load``; over REST, create the site first.
+    The server wipes the site's content and loads the file; there is no merge. The media
+    library stays: every media name the file uses must already be in it, or the server
+    refuses with ``missing_media`` and changes nothing. ``site dump --format json`` writes
+    such a file. Creating a new site from a file is ``manage.py site --load``.
     """
-    source = _source(path, "site load", ".json, .yml, .yaml or .csv")
-    suffix = source.suffix.lower()
-    if suffix not in LOAD_SUFFIXES:
-        hint = " (a .zip archive is `site restore`)" if suffix == ".zip" else ""
-        raise ApiError(f"--path {source}: expected .json, .yml, .yaml or .csv{hint}")
+    source = _source(path, "site load", "a .json from `site dump --format json`")
+    if source.suffix.lower() == ".zip":
+        raise ApiError(f"--path {source}: a .zip backup is `site restore`")
+    body = json_file(source, "--path")
     client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
-    payload = client.json("POST", client.site_path(), files=[source])
+    payload = client.json("POST", client.site_path(), body=body)
     site = (payload or {}).get("domain") or credentials.require_site(client.settings)
     return {"domain": str(site), "file": str(source)}
 
@@ -198,7 +191,6 @@ def load_site(
 @writes
 def restore_site(
     *,
-    mode: str | None = None,
     domain: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
@@ -206,24 +198,18 @@ def restore_site(
     path: Path | None = None,
     dry_run: bool = False,
 ) -> RestoreSite | PlannedRequest:
-    """Restore a portable .zip over an existing site: ``POST /api/v1/site/<d>/?mode=``.
+    """Replace the site with a .zip backup: ``POST /api/v1/site/<d>/``, the file uploaded.
 
-    ``merge`` (default) keeps rows the archive does not mention, ``clobber`` overwrites rows
-    it carries, ``replace`` wipes the site's content and media first. Restoring into a
-    fresh site is ``manage.py site --load x.zip``.
+    The server wipes the site's content and media and restores the archive's; there is no
+    merge. Restoring into a fresh site is ``manage.py site --load x.zip``.
     """
-    chosen = (mode or "merge").lower()
-    if chosen not in RESTORE_MODES:
-        raise ApiError(f"--mode {chosen!r}: expected one of {', '.join(RESTORE_MODES)}")
     source = _source(path, "site restore", "a .zip from `site dump --format zip`")
     if source.suffix.lower() != ".zip":
         raise ApiError(f"--path {source}: expected a .zip archive")
     client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
-    payload = client.json(
-        "POST", client.site_path(), query={"mode": chosen}, files=[source]
-    )
+    payload = client.json("POST", client.site_path(), files=[source])
     site = (payload or {}).get("domain") or credentials.require_site(client.settings)
-    return {"domain": str(site), "file": str(source), "mode": chosen}
+    return {"domain": str(site), "file": str(source)}
 
 
 @writes

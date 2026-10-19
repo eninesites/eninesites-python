@@ -2,9 +2,9 @@
 name: restore
 kind: verb
 domain: [eninesites]
-params: [mode, domain, api-key, base-url, project-name, path, dry-run]
+params: [domain, api-key, base-url, project-name, path, dry-run]
 invocations: [""]
-summary: "Restore your site from a .zip backup (merge, clobber or replace)"
+summary: "Replace your site with a .zip backup (content and media)"
 pnode: [./README.md]
 bearing: contract
 ---

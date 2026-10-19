@@ -89,7 +89,6 @@ def _cmd_load(args: argparse.Namespace) -> int:
 
 def _cmd_restore(args: argparse.Namespace) -> int:
     result = api.restore_site(
-        mode=args.mode,
         domain=args.domain,
         api_key=args.api_key,
         base_url=args.base_url,
@@ -196,9 +195,9 @@ def subcommands() -> list[tuple[str, str]]:
     return [
         ("create", "Create a new site"),
         ("list", "List sites accessible to the authenticated user"),
-        ("dump", "Export site data as JSON, YAML, CSV, zip, or media zip"),
-        ("load", "Import/upsert content into existing site"),
-        ("restore", "Restore your site from a .zip backup (merge, clobber or replace)"),
+        ("dump", "Download your site as a .zip backup or JSON data"),
+        ("load", "Replace your site's content with a JSON export (media stays)"),
+        ("restore", "Replace your site with a .zip backup (content and media)"),
         ("copy", "Duplicate the site into a new domain"),
         (
             "configure",
@@ -303,7 +302,7 @@ def parser() -> argparse.ArgumentParser:  # pylint: disable=too-many-statements
         "--format",
         dest="format_",
         metavar="FORMAT",
-        help="File format: json (default), yaml, csv, zip or media",
+        help="File format: json (default) or zip",
     )
     p_dump.add_argument("--api-key", help="Your API key (overrides the stored one)")
     p_dump.add_argument(
@@ -329,9 +328,6 @@ def parser() -> argparse.ArgumentParser:  # pylint: disable=too-many-statements
     p_load.set_defaults(func=_cmd_load)
 
     p_restore = sub.add_parser("restore")
-    p_restore.add_argument(
-        "--mode", help="How to restore: merge (default), clobber or replace"
-    )
     p_restore.add_argument(
         "--domain", help="Your site's domain (overrides the one set by site select)"
     )

@@ -48,15 +48,13 @@ def print_dump(result: DumpSite) -> None:
 
 
 def print_load(result: LoadSite) -> None:
-    """``site load`` as text: the file and the site it went into."""
-    text.line(f"Loaded {result['file']} into {result['domain']}")
+    """``site load`` as text: the file and the site whose content it replaced."""
+    text.line(f"Replaced {result['domain']}'s content with {result['file']}")
 
 
 def print_restore(result: RestoreSite) -> None:
-    """``site restore`` as text: the archive, the site and the mode."""
-    text.line(
-        f"Restored {result['file']} over {result['domain']} (mode {result['mode']})"
-    )
+    """``site restore`` as text: the archive and the site it replaced."""
+    text.line(f"Replaced {result['domain']} with {result['file']}")
 
 
 def print_copy(result: CopySite) -> None:

@@ -46,18 +46,17 @@ class DumpSite(TypedDict):
 
 
 class LoadSite(TypedDict):
-    """What ``site load`` returns: the site the file was upserted into."""
+    """What ``site load`` returns: the site whose content the file replaced."""
 
     domain: str
     file: str
 
 
 class RestoreSite(TypedDict):
-    """What ``site restore`` returns: the site the archive was restored over, and how."""
+    """What ``site restore`` returns: the site the archive replaced."""
 
     domain: str
     file: str
-    mode: str
 
 
 class CopySite(TypedDict):

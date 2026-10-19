@@ -25,6 +25,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Changed
 
+- `site load` and `site restore` follow the server's API 2.2.0, where both replace the whole
+  site: `load` sends a `.json` export as the request body and keeps the media library (every
+  media name in it must already be there); `restore` uploads a `.zip` backup and replaces the
+  content and media. Neither merges any more. `site dump --format` takes `json` (still the
+  default) or `zip`; the server dropped `yaml`, `csv` and `media`.
+
 - A write verb's api function returns `<Result> | PlannedRequest` and takes `dry_run`; a
   Python caller indexes the result through `eninesites.lib.dryrun.done(result)`, which
   returns `<Result>` and raises `TypeError` on a planned request.
@@ -42,6 +48,9 @@ All notable changes to this project are documented in this file. The format is b
   where it also names a media item or a tag.
 
 ### Removed
+
+- `site restore --mode`: the server dropped `merge` and `clobber`, and a restore always
+  replaces.
 
 - The `page` and `chat` nouns (`page crawl`, `chat stream`, `chat magic-link`). Every verb on
   them only refused: crawling a page is a server chat tool with no REST endpoint, and the chat

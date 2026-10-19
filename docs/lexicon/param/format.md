@@ -6,7 +6,7 @@ type: string
 required: false
 defined: false
 position: []
-summary: "File format: json (default), yaml, csv, zip or media"
+summary: "File format: json (default) or zip"
 pnode: [README.md]
 bearing: contract
 ---

@@ -6,7 +6,7 @@ type: path
 required: false
 defined: false
 position: []
-summary: "Subscription plan for your site (default: free)"
+summary: "Subscription plan for your site, from plan list (default: free)"
 pnode: [README.md]
 bearing: contract
 ---

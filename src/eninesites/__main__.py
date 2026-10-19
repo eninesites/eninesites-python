@@ -46,6 +46,7 @@ def commands() -> list[tuple[str, str]]:
         ("audit", "Audit your site for AEO + SEO compliance"),
         ("aeo", "View the JSON-LD emitted by a page or the whole site"),
         ("seo", "SEO page management"),
+        ("plan", "Subscription plans you can create a site on"),
     ]
 
 

@@ -20,6 +20,7 @@ same work runs from a script or a cron job as easily as by hand.
 - Content: artifacts and their roles, maps, tags, images, design and AEO data
 - Tags, external URLs, URL maps, media and site users
 - Themes and custom themes
+- The subscription plans you can create a site on
 - XEO audits and AEO JSON-LD inspection
 
 ## Installation
@@ -165,6 +166,7 @@ Exit codes: 0 done, 1 ran and found something to report, 2 could not run.
 | `artifact.tag` | attach, detach, list |
 | `audit` | get, run |
 | `media` | delete, get, list, update, upload |
+| `plan` | list |
 | `seo` | create, delete, get, list, update |
 | `site` | build, check, configure, copy, create, delete, dump, list, load, propose, randomize-subdomain, restore, review, select |
 | `tag` | create, delete, get, list, update |

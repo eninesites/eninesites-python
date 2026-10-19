@@ -267,7 +267,9 @@ def parser() -> argparse.ArgumentParser:  # pylint: disable=too-many-statements
     p_create.add_argument("--phone", help="Contact phone for your site")
     p_create.add_argument("--theme", help="Theme for your site (default: bauhaus)")
     p_create.add_argument(
-        "--plan", type=Path, help="Subscription plan for your site (default: free)"
+        "--plan",
+        type=Path,
+        help="Subscription plan for your site, from plan list (default: free)",
     )
     p_create.add_argument("--api-key", help="Your API key (overrides the stored one)")
     p_create.add_argument(
@@ -350,7 +352,9 @@ def parser() -> argparse.ArgumentParser:  # pylint: disable=too-many-statements
     )
     p_copy.add_argument("--name", help="Name of the site, theme, artifact, tag or URL")
     p_copy.add_argument(
-        "--plan", type=Path, help="Subscription plan for your site (default: free)"
+        "--plan",
+        type=Path,
+        help="Subscription plan for your site, from plan list (default: free)",
     )
     p_copy.add_argument("--api-key", help="Your API key (overrides the stored one)")
     p_copy.add_argument(

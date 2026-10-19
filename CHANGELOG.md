@@ -12,6 +12,9 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
+- `python -m eninesites.plan list`: the subscription plans you can create a site on, cheapest
+  first. Each slug is a value `site create --plan` and `site copy --plan` accept.
+
 - `--dry-run` on every write verb: the request the verb would send, returned as its result
   and not sent.
 - `python -m eninesites describe`: every command, its flags and its output schema, as data.

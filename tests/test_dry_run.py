@@ -54,6 +54,7 @@ INPUT: dict[str, list[str]] = {
     "artifact.map.update": ["--data", "order.json"],
     "artifact.url.update": ["--data", "order.json"],
     "artifact.image.attach": ["--media", "1"],
+    "artifact.image.update": ["--order", "2"],
     "tag.create": ["--name", "docs"],
     "tag.update": ["--name", "manuals"],
     "url.create": ["--data", "url.json"],
@@ -93,14 +94,14 @@ def not_available(node: ModuleType, verb: str) -> bool:
 
 
 def test_the_marked_verbs_are_the_write_rows() -> None:
-    """``dryrun.writes`` and ``surface.jsonl`` name the same 54 verbs: one cannot drift."""
+    """``dryrun.writes`` and ``surface.jsonl`` name the same 55 verbs: one cannot drift."""
     marked = set()
     for row in ROWS:
         node, argv = command(row)
         if dryrun.is_write(node.api.VERBS[argv[0]]):
             marked.add(row["id"])
     assert marked == {row["id"] for row in WRITES}
-    assert len(marked) == 54
+    assert len(marked) == 55
 
 
 @pytest.mark.parametrize("row", WRITES, ids=[row["id"] for row in WRITES])

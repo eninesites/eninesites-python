@@ -100,7 +100,7 @@ def subcommands() -> list[tuple[str, str]]:
     """One (verb, summary) per verb: the one home of each verb's help text."""
     return [
         ("list", "List an artifact's external URLs, in order"),
-        ("attach", "Attach a saved URL to an artifact"),
+        ("attach", "Attach a saved URL to an artifact, first unless --order says"),
         ("get", "Get one of an artifact's external URLs"),
         ("update", "Reorder an external URL, or point it at another saved URL"),
         ("detach", "Detach an external URL from an artifact (the saved URL stays)"),
@@ -154,7 +154,7 @@ def parser() -> argparse.ArgumentParser:
         "--name", required=True, help="Name of the site, theme, artifact, tag or URL"
     )
     p_attach.add_argument(
-        "--order", help="Position among the artifact's URLs (default: 0, first)"
+        "--order", help="Position among the artifact's URLs or images, 0 or more"
     )
     p_attach.add_argument(
         "--dry-run",

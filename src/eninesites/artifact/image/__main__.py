@@ -59,6 +59,7 @@ def _cmd_attach(args: argparse.Namespace) -> int:
         base_url=args.base_url,
         project_name=args.project_name,
         media=args.media,
+        order=args.order,
         dry_run=args.dry_run,
     )
     return json_renderer.show(args, result, plaintext.print_attach)
@@ -89,13 +90,31 @@ def _cmd_detach(args: argparse.Namespace) -> int:
     return json_renderer.show(args, result, plaintext.print_detach)
 
 
+def _cmd_update(args: argparse.Namespace) -> int:
+    result = api.update_image(
+        slug=args.slug,
+        id_=args.id_,
+        domain=args.domain,
+        api_key=args.api_key,
+        base_url=args.base_url,
+        project_name=args.project_name,
+        order=args.order,
+        dry_run=args.dry_run,
+    )
+    return json_renderer.show(args, result, plaintext.print_update)
+
+
 def subcommands() -> list[tuple[str, str]]:
     """One (verb, summary) per verb: the one home of each verb's help text."""
     return [
         ("list", "List gallery images for an artifact (paginated)"),
-        ("attach", "Attach a media file to an artifact's gallery (idempotent)"),
+        (
+            "attach",
+            "Attach a media file to an artifact's gallery, last unless --order says",
+        ),
         ("get", "Get a single gallery image association"),
         ("detach", "Remove a gallery image from an artifact"),
+        ("update", "Move a gallery image to another position"),
     ]
 
 
@@ -144,6 +163,9 @@ def parser() -> argparse.ArgumentParser:
     )
     p_attach.add_argument(
         "--media", required=True, help="Image to add, by its id from media list"
+    )
+    p_attach.add_argument(
+        "--order", help="Position among the artifact's URLs or images, 0 or more"
     )
     p_attach.set_defaults(func=_cmd_attach)
 
@@ -196,6 +218,35 @@ def parser() -> argparse.ArgumentParser:
         "--project-name", help="Config profile to use (default: default)"
     )
     p_detach.set_defaults(func=_cmd_detach)
+
+    p_update = sub.add_parser("update")
+    p_update.add_argument(
+        "--slug",
+        required=True,
+        help="Artifact name or slug; for media and tags, their slug",
+    )
+    p_update.add_argument(
+        "--id",
+        dest="id_",
+        required=True,
+        help="Entry id, from the matching list command",
+    )
+    p_update.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_update.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_update.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_update.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_update.add_argument(
+        "--order",
+        required=True,
+        help="Position among the artifact's URLs or images, 0 or more",
+    )
+    p_update.set_defaults(func=_cmd_update)
 
     for verb_parser in sub.choices.values():
         json_renderer.add_flag(verb_parser)

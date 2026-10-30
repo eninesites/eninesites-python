@@ -28,6 +28,7 @@ class ImageRow(TypedDict, total=False):
     artifact: int
     image: int
     image_detail: MediaDetail
+    order: int
 
 
 class ListImage(TypedDict):
@@ -52,3 +53,7 @@ class DetachImage(TypedDict):
     slug: str
     id: str
     detached: bool
+
+
+class UpdateImage(ImageRow):
+    """What ``artifact image update`` returns: the gallery entry at its new position."""

@@ -36,6 +36,8 @@ All notable changes to this project are documented in this file. The format is b
   refuses (409) a theme that is public, live on any site, or another theme's parent.
 - `user remove --username <name>` takes a member off the site; their account, other sites
   and tokens stay. The server refuses (409) to remove the site's last admin.
+- `artifact.image attach --order` places a gallery image (without it, the image goes last),
+  and `artifact.image update --id --order` moves one. Gallery rows now carry `order`.
 
 ### Changed
 

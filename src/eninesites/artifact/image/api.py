@@ -5,7 +5,8 @@ nothing below them. Each verb is one function returning one result type from
 ``lib.results``, plain JSON. A request the api cannot run raises ``ApiError``.
 
 Server routes (``resources.py:454-506``): ``.../artifacts/<slug>/images/`` (GET paginated,
-POST ``{"image": <media id>}``, idempotent) and ``.../images/<id>/`` (GET, DELETE).
+POST ``{"image": <media id>, "order"?: int}``, idempotent) and ``.../images/<id>/`` (GET,
+PATCH ``{"order": int}``, DELETE). An image sent without an order, or with 0, goes last.
 ``--media`` is the media item's id (``media list`` shows it); ``--id`` is a gallery entry's.
 """
 
@@ -19,10 +20,23 @@ from collections.abc import Callable
 
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
-from eninesites.lib.client.records import project, required, required_int, rows
+from eninesites.lib.client.records import (
+    integer,
+    project,
+    required,
+    required_int,
+    rows,
+)
 from eninesites.lib.dryrun import PlannedRequest, writes
 
-from .lib.results import AttachImage, DetachImage, GetImage, ImageRow, ListImage
+from .lib.results import (
+    AttachImage,
+    DetachImage,
+    GetImage,
+    ImageRow,
+    ListImage,
+    UpdateImage,
+)
 
 SLUG = "the artifact's name or slug"
 ENTRY = "the gallery entry's id"
@@ -52,15 +66,25 @@ def attach_image(
     base_url: str | None = None,
     project_name: str | None = None,
     media: str | None = None,
+    order: str | None = None,
     dry_run: bool = False,
 ) -> AttachImage | PlannedRequest:
-    """Add a media item to the gallery (idempotent): ``POST .../images/``."""
-    image = required_int(media, "--media", "the media item's id, from `media list`")
+    """Add a media item to the gallery (idempotent): ``POST .../images/``.
+
+    Without ``--order`` (or with 0) the server puts it after the last image. A media item
+    already in the gallery comes back as it is, and the order sent is ignored.
+    """
+    body: dict[str, object] = {
+        "image": required_int(
+            media, "--media", "the media item's id, from `media list`"
+        )
+    }
+    position = integer(order, "--order")
+    if position is not None:
+        body["order"] = position
     client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
     path = client.site_path("artifacts", required(slug, "--slug", SLUG), "images")
-    result: AttachImage = project(
-        client.json("POST", path, body={"image": image}), AttachImage
-    )
+    result: AttachImage = project(client.json("POST", path, body=body), AttachImage)
     return result
 
 
@@ -107,6 +131,31 @@ def detach_image(
     }
 
 
+@writes
+def update_image(
+    *,
+    slug: str | None = None,
+    id_: str | None = None,
+    domain: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    project_name: str | None = None,
+    order: str | None = None,
+    dry_run: bool = False,
+) -> UpdateImage | PlannedRequest:
+    """Move a gallery entry: ``PATCH .../images/<id>/`` with ``{"order": ...}``."""
+    entry = required(id_, "--id", ENTRY)
+    position = required_int(order, "--order", "the image's position, 0 or more")
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
+    path = client.site_path(
+        "artifacts", required(slug, "--slug", SLUG), "images", entry
+    )
+    result: UpdateImage = project(
+        client.json("PATCH", path, body={"order": position}), UpdateImage
+    )
+    return result
+
+
 # CLI spelling -> the function it binds. A verb spelled like a keyword or a builtin
 # (`import`, `list`) is a key here rather than a function name; the lexicon reads this
 # literal to find each verb.
@@ -115,4 +164,5 @@ VERBS: dict[str, Callable[..., object]] = {
     "attach": attach_image,
     "get": get_image,
     "detach": detach_image,
+    "update": update_image,
 }

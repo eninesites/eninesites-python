@@ -6,7 +6,7 @@ type: string
 required: false
 defined: false
 position: []
-summary: "Position among the artifact's URLs (default: 0, first)"
+summary: "Position among the artifact's URLs or images, 0 or more"
 pnode: [README.md]
 bearing: contract
 ---

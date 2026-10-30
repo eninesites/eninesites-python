@@ -10,7 +10,14 @@ import sys
 
 from eninesites.lib.renderer import text
 
-from ..results import AttachImage, DetachImage, GetImage, ImageRow, ListImage
+from ..results import (
+    AttachImage,
+    DetachImage,
+    GetImage,
+    ImageRow,
+    ListImage,
+    UpdateImage,
+)
 
 
 def _flat(row: ImageRow) -> dict[str, object]:
@@ -45,6 +52,11 @@ def print_get(result: GetImage) -> None:
 def print_detach(result: DetachImage) -> None:
     """``artifact image detach`` as text."""
     text.line(f"Removed gallery entry {result['id']} from {result['slug']}")
+
+
+def print_update(result: UpdateImage) -> None:
+    """``artifact image update`` as text."""
+    text.record(_flat(result))
 
 
 def error(message: str) -> None:

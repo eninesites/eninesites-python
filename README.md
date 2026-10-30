@@ -160,7 +160,7 @@ Exit codes: 0 done, 1 ran and found something to report, 2 could not run.
 | `artifact` | create, delete, get, list, update |
 | `artifact.aeo` | create, delete, get, update |
 | `artifact.design` | get, update |
-| `artifact.image` | attach, detach, get, list |
+| `artifact.image` | attach, detach, get, list, update |
 | `artifact.map` | candidates, create, delete, get, list, update |
 | `artifact.role` | assign, list, replace, unassign |
 | `artifact.tag` | attach, detach, list |

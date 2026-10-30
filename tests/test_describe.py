@@ -58,4 +58,4 @@ def test_describe_conforms_and_carries_the_shared_shapes(run_cli: Run) -> None:
     assert conforms(result, DescribeRoot) == []
     assert json.loads(result["error"]) == json_schema(ErrorResult)
     assert json.loads(result["planned"]) == json_schema(dryrun.PlannedRequest)
-    assert sum(c["writes"] for c in result["commands"]) == 54
+    assert sum(c["writes"] for c in result["commands"]) == 55

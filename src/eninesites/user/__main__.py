@@ -85,6 +85,18 @@ def _cmd_update(args: argparse.Namespace) -> int:
     return json_renderer.show(args, result, plaintext.print_update)
 
 
+def _cmd_remove(args: argparse.Namespace) -> int:
+    result = api.remove_user(
+        username=args.username,
+        domain=args.domain,
+        api_key=args.api_key,
+        base_url=args.base_url,
+        project_name=args.project_name,
+        dry_run=args.dry_run,
+    )
+    return json_renderer.show(args, result, plaintext.print_remove)
+
+
 def subcommands() -> list[tuple[str, str]]:
     """One (verb, summary) per verb: the one home of each verb's help text."""
     return [
@@ -92,6 +104,10 @@ def subcommands() -> list[tuple[str, str]]:
         ("add", "Add an existing user to the site, or update their role (admin only)"),
         ("get", "Get site user"),
         ("update", "Update user role (admin only)"),
+        (
+            "remove",
+            "Remove a user from the site, unless they are its last admin (admin only)",
+        ),
     ]
 
 
@@ -174,6 +190,22 @@ def parser() -> argparse.ArgumentParser:
         help="AEO role code for content, or admin/editor/reader for users",
     )
     p_update.set_defaults(func=_cmd_update)
+
+    p_remove = sub.add_parser("remove")
+    p_remove.add_argument(
+        "--username", required=True, help="Username of an existing eninesites user"
+    )
+    p_remove.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_remove.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_remove.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_remove.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_remove.set_defaults(func=_cmd_remove)
 
     for verb_parser in sub.choices.values():
         json_renderer.add_flag(verb_parser)

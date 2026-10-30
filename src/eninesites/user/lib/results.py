@@ -37,3 +37,11 @@ class GetUser(UserRow):
 
 class UpdateUser(UserRow):
     """What ``user update`` returns: the membership with its new role."""
+
+
+class RemoveUser(TypedDict):
+    """What ``user remove`` returns: the member named, and that their membership is gone."""
+
+    domain: str
+    username: str
+    removed: bool

@@ -12,6 +12,8 @@ from typing import Any, Callable
 import pytest
 from conftest import FakeServer
 
+from eninesites.errors import ApiError
+from eninesites.lib import dryrun
 from eninesites.user import __main__ as cli
 from eninesites.user import api
 
@@ -21,6 +23,7 @@ SAMPLES: dict[str, dict[str, Any]] = {
     "add": {"username": "jo", "role": "editor"},
     "get": {"username": "jo"},
     "update": {"username": "jo", "role": "reader"},
+    "remove": {"username": "jo"},
 }
 
 # Verbs with no REST endpoint: they refuse instead of returning.
@@ -32,6 +35,7 @@ ROUTES: dict[str, tuple[str, str]] = {
     "add": ("POST", "/api/v1/site/example.com/users/"),
     "get": ("GET", "/api/v1/site/example.com/users/jo/"),
     "update": ("POST", "/api/v1/site/example.com/users/jo/"),
+    "remove": ("DELETE", "/api/v1/site/example.com/users/jo/"),
 }
 
 
@@ -53,3 +57,29 @@ def test_user_verbs_send_the_documented_request(verb: str, server: FakeServer) -
     method, path = ROUTES[verb]
     sent = server.calls[0]
     assert (sent.method, sent.path) == (method, path)
+
+
+def test_remove_reports_the_member_it_removed(server: FakeServer) -> None:
+    server.add("DELETE", "/api/v1/site/example.com/users/jo/", None, status=204)
+    assert dryrun.done(api.remove_user(username="jo")) == {
+        "domain": "example.com",
+        "username": "jo",
+        "removed": True,
+    }
+
+
+def test_remove_passes_the_last_admin_refusal_through(server: FakeServer) -> None:
+    server.add(
+        "DELETE",
+        "/api/v1/site/example.com/users/jo/",
+        {
+            "type": "about:blank",
+            "status": 409,
+            "code": "last_admin",
+            "detail": "A site must keep at least one admin.",
+        },
+        status=409,
+        content_type="application/problem+json",
+    )
+    with pytest.raises(ApiError, match="at least one admin"):
+        api.remove_user(username="jo")

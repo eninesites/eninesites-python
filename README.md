@@ -175,7 +175,7 @@ Exit codes: 0 done, 1 ran and found something to report, 2 could not run.
 | `theme.custom` | delete, export, import |
 | `url` | create, delete, get, list, update |
 | `urlmap` | create, delete, get, list, update |
-| `user` | add, get, list, update |
+| `user` | add, get, list, remove, update |
 
 ## Not available over the API
 

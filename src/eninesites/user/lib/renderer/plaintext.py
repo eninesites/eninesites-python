@@ -10,7 +10,7 @@ import sys
 
 from eninesites.lib.renderer import text
 
-from ..results import AddUser, GetUser, ListUser, UpdateUser
+from ..results import AddUser, GetUser, ListUser, RemoveUser, UpdateUser
 
 COLUMNS = ["username", "email", "role", "first_name", "last_name"]
 
@@ -33,6 +33,11 @@ def print_get(result: GetUser) -> None:
 def print_update(result: UpdateUser) -> None:
     """``user update`` as text."""
     text.record(result)
+
+
+def print_remove(result: RemoveUser) -> None:
+    """``user remove`` as text."""
+    text.line(f"Removed {result['username']} from {result['domain']}")
 
 
 def error(message: str) -> None:

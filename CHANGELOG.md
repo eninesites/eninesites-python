@@ -34,6 +34,8 @@ All notable changes to this project are documented in this file. The format is b
   them into a sentence; a usage error is the same document with `code` `usage`.
 - `theme custom delete --name <label>` deletes a custom theme and its templates. The server
   refuses (409) a theme that is public, live on any site, or another theme's parent.
+- `user remove --username <name>` takes a member off the site; their account, other sites
+  and tokens stay. The server refuses (409) to remove the site's last admin.
 
 ### Changed
 

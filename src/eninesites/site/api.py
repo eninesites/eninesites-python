@@ -72,9 +72,11 @@ def create_site(
 ) -> CreateSite | PlannedRequest:
     """Create a site owned by the caller: ``POST /api/v1/site/``.
 
-    ``--domain`` is the NEW site's domain; without it a free plan is served on an allocated
-    subdomain. ``--data`` carries any other body field (``config``, ``colors``, ``content``,
-    ``template``); the named flags override it.
+    ``--domain`` is the NEW site's domain; without it the server makes one up, on any plan,
+    and returns it. ``--data`` carries any other body field (``config``, ``colors``,
+    ``content``, ``template``); the named flags override it. ``template`` is a starter
+    content file (e.g. ``agency``), not a theme, and with it the server reads only
+    ``domain`` and ``name``.
     """
     body = merged(
         data,

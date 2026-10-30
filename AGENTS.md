@@ -6,6 +6,9 @@
 a client of the eninesites REST API and nothing else. It imports no server code and touches no
 database; its only contract with the server is the API. First moves: `make install-dev`, then
 `.venv/bin/python -m eninesites` lists every noun, and `make check` runs the gate.
+For worked usage, read the private examples repository
+[eninesites-examples](https://github.com/eninesites/eninesites-examples): a site's `edit.sh` first,
+then its `create.sh`.
 
 ## Architecture
 

@@ -172,7 +172,7 @@ Exit codes: 0 done, 1 ran and found something to report, 2 could not run.
 | `site` | build, check, configure, copy, create, delete, dump, list, load, propose, randomize-subdomain, restore, review, select |
 | `tag` | create, delete, get, list, update |
 | `theme` | check, create, delete, list, review |
-| `theme.custom` | export, import |
+| `theme.custom` | delete, export, import |
 | `url` | create, delete, get, list, update |
 | `urlmap` | create, delete, get, list, update |
 | `user` | add, get, list, update |

@@ -6,7 +6,7 @@ nothing below them. Each verb is one function returning one result type from
 
 Server route: ``/api/v1/site/<d>/custom-themes/`` (``CustomThemeExportImportView``,
 ``rest.py:1085-1177``): GET ``?name=`` exports, POST imports (creating or replacing the
-templates) and makes the imported theme the site's active theme.
+templates) and makes it the live theme only when asked, DELETE ``?name=`` removes one.
 """
 
 # A verb's signature is its lexicon params, one keyword per flag, so the count is the
@@ -21,10 +21,10 @@ from pathlib import Path
 from eninesites.errors import ApiError
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
-from eninesites.lib.client.records import boolean, json_file, project
+from eninesites.lib.client.records import boolean, json_file, project, required
 from eninesites.lib.dryrun import PlannedRequest, writes
 
-from .lib.results import CustomTheme, ExportCustom, ImportCustom
+from .lib.results import CustomTheme, DeleteCustom, ExportCustom, ImportCustom
 
 
 def export_custom(
@@ -103,10 +103,38 @@ def import_custom(
     }
 
 
+@writes
+def delete_custom(
+    *,
+    name: str | None = None,
+    domain: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    project_name: str | None = None,
+    dry_run: bool = False,
+) -> DeleteCustom | PlannedRequest:
+    """Delete a custom theme and its templates: ``DELETE .../custom-themes/?name=`` (204).
+
+    The server refuses with 409 a theme that is public (``theme_public``), any site's live
+    theme (``theme_in_use``), or the parent of another theme (``theme_has_children``).
+    """
+    label = required(
+        name, "--name", "the custom theme's name, from `theme custom export`"
+    )
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
+    client.request("DELETE", client.site_path("custom-themes"), query={"name": label})
+    return {
+        "domain": credentials.require_site(client.settings),
+        "name": label,
+        "deleted": True,
+    }
+
+
 # CLI spelling -> the function it binds. A verb spelled like a keyword or a builtin
 # (`import`, `list`) is a key here rather than a function name; the lexicon reads this
 # literal to find each verb.
 VERBS: dict[str, Callable[..., object]] = {
     "export": export_custom,
     "import": import_custom,
+    "delete": delete_custom,
 }

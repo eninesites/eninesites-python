@@ -1,6 +1,6 @@
 """CLI entry: python -m eninesites.theme.custom
 
-Export or import your site's custom theme
+Export, import or delete your site's custom themes
 
 A thin surface over ``api``: each verb is one ``_cmd_<verb>`` that calls one api function
 and hands its result to a renderer. It decides nothing and prints nothing itself. Every
@@ -65,11 +65,27 @@ def _cmd_import(args: argparse.Namespace) -> int:
     return json_renderer.show(args, result, plaintext.print_import)
 
 
+def _cmd_delete(args: argparse.Namespace) -> int:
+    result = api.delete_custom(
+        name=args.name,
+        domain=args.domain,
+        api_key=args.api_key,
+        base_url=args.base_url,
+        project_name=args.project_name,
+        dry_run=args.dry_run,
+    )
+    return json_renderer.show(args, result, plaintext.print_delete)
+
+
 def subcommands() -> list[tuple[str, str]]:
     """One (verb, summary) per verb: the one home of each verb's help text."""
     return [
         ("export", "Export a custom theme by name"),
         ("import", "Import or update a custom theme from an exported payload"),
+        (
+            "delete",
+            "Delete a custom theme by name, unless it is live, public or a parent",
+        ),
     ]
 
 
@@ -77,7 +93,7 @@ def parser() -> argparse.ArgumentParser:
     """Build the parser without parsing: the audit and --help both read this."""
     p = NounParser(
         prog="python -m eninesites.theme.custom",
-        description="Export or import your site's custom theme",
+        description="Export, import or delete your site's custom themes",
         nodes=commands(),
     )
     sub = p.verbs(subcommands(), dest="phase")
@@ -121,6 +137,22 @@ def parser() -> argparse.ArgumentParser:
         help="Make it your site's live theme: true or false (default: false, the live theme stays)",
     )
     p_import.set_defaults(func=_cmd_import)
+
+    p_delete = sub.add_parser("delete")
+    p_delete.add_argument(
+        "--name", required=True, help="Name of the site, theme, artifact, tag or URL"
+    )
+    p_delete.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_delete.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_delete.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_delete.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_delete.set_defaults(func=_cmd_delete)
 
     for verb_parser in sub.choices.values():
         json_renderer.add_flag(verb_parser)

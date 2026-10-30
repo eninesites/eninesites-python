@@ -31,7 +31,7 @@ from eninesites.theme.lib.renderer import plaintext
 def commands() -> list[tuple[str, str]]:
     """This node's sub-nouns, as (name, summary); its verbs are declared in subcommands()."""
     return [
-        ("custom", "Export or import your site's custom theme"),
+        ("custom", "Export, import or delete your site's custom themes"),
     ]
 
 

@@ -32,6 +32,8 @@ All notable changes to this project are documented in this file. The format is b
 - Under `--json`, a refusal is one JSON document on stderr (`status`, `code`, `detail`,
   `errors`, `method`, `path`), carrying the server's problem details instead of flattening
   them into a sentence; a usage error is the same document with `code` `usage`.
+- `theme custom delete --name <label>` deletes a custom theme and its templates. The server
+  refuses (409) a theme that is public, live on any site, or another theme's parent.
 
 ### Changed
 

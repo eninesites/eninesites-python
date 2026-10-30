@@ -40,3 +40,11 @@ class ImportCustom(TypedDict):
     theme: str
     active: bool
     previous_theme: str | None
+
+
+class DeleteCustom(TypedDict):
+    """What ``theme custom delete`` returns: the theme named, and that it is gone."""
+
+    domain: str
+    name: str
+    deleted: bool

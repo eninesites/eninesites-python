@@ -2,7 +2,7 @@
 name: custom
 kind: noun
 domain: [eninesites]
-summary: "Export or import your site's custom theme"
+summary: "Export, import or delete your site's custom themes"
 pnode: [../README.md]
 bearing: contract
 ---

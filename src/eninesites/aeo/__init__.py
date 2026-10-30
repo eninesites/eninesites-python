@@ -1,4 +1,4 @@
 """aeo: a namespace only; import ``api`` or ``lib``, no re-exports.
 
-TODO — what `aeo` means
+View the JSON-LD emitted by a page or the whole site
 """

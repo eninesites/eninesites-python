@@ -1,6 +1,6 @@
 """CLI entry: python -m eninesites.urlmap
 
-TODO — what `urlmap` means
+Custom URL mappings for artifacts
 
 A thin surface over ``api``: each verb is one ``_cmd_<verb>`` that calls one api function
 and hands its result to a renderer. It decides nothing and prints nothing itself. Every
@@ -112,65 +112,101 @@ def parser() -> argparse.ArgumentParser:
     """Build the parser without parsing: the audit and --help both read this."""
     p = NounParser(
         prog="python -m eninesites.urlmap",
-        description="TODO — what `urlmap` means",
+        description="Custom URL mappings for artifacts",
         nodes=commands(),
     )
     sub = p.verbs(subcommands(), dest="phase")
 
     p_list = sub.add_parser("list")
     p_list.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_list.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_list.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_list.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_list.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_list.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_list.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_list.set_defaults(func=_cmd_list)
 
     p_create = sub.add_parser("create")
     p_create.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_create.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_create.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_create.add_argument("--project-name", help="TODO — what `project-name` means")
-    p_create.add_argument("--data", type=Path, help="TODO — what `data` means")
+    p_create.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_create.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_create.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_create.add_argument(
+        "--data", type=Path, help="JSON file with extra fields (- reads from stdin)"
+    )
     p_create.set_defaults(func=_cmd_create)
 
     p_get = sub.add_parser("get")
     p_get.add_argument(
-        "--id", dest="id_", metavar="ID", required=True, help="TODO — what `id` means"
+        "--id",
+        dest="id_",
+        metavar="ID",
+        required=True,
+        help="Entry id, from the matching list command",
     )
     p_get.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_get.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_get.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_get.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_get.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_get.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_get.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_get.set_defaults(func=_cmd_get)
 
     p_update = sub.add_parser("update")
     p_update.add_argument(
-        "--id", dest="id_", metavar="ID", required=True, help="TODO — what `id` means"
+        "--id",
+        dest="id_",
+        metavar="ID",
+        required=True,
+        help="Entry id, from the matching list command",
     )
     p_update.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_update.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_update.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_update.add_argument("--project-name", help="TODO — what `project-name` means")
-    p_update.add_argument("--data", type=Path, help="TODO — what `data` means")
+    p_update.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_update.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_update.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_update.add_argument(
+        "--data", type=Path, help="JSON file with extra fields (- reads from stdin)"
+    )
     p_update.set_defaults(func=_cmd_update)
 
     p_delete = sub.add_parser("delete")
     p_delete.add_argument(
-        "--id", dest="id_", metavar="ID", required=True, help="TODO — what `id` means"
+        "--id",
+        dest="id_",
+        metavar="ID",
+        required=True,
+        help="Entry id, from the matching list command",
     )
     p_delete.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_delete.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_delete.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_delete.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_delete.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_delete.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_delete.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_delete.set_defaults(func=_cmd_delete)
 
     for verb_parser in sub.choices.values():

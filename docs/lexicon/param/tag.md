@@ -6,9 +6,9 @@ type: string
 required: true
 defined: false
 position: []
-summary: TODO — what `tag` means
+summary: "Tag to add or remove, from tag list"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # tag

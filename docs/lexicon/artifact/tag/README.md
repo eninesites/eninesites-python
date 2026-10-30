@@ -2,9 +2,9 @@
 name: tag
 kind: noun
 domain: [eninesites]
-summary: TODO — what `tag` means
+summary: "Add/remove tags for your artifacts"
 pnode: [../README.md]
-bearing: draft
+bearing: contract
 ---
 
 # tag

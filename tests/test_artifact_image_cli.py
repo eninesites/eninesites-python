@@ -14,6 +14,7 @@ from conftest import FakeServer
 
 from eninesites.artifact.image import __main__ as cli
 from eninesites.artifact.image import api
+from eninesites.errors import ApiError
 
 # One real call per verb, for the test that checks each result against its type.
 SAMPLES: dict[str, dict[str, Any]] = {
@@ -21,6 +22,7 @@ SAMPLES: dict[str, dict[str, Any]] = {
     "attach": {"slug": "services", "media": "12"},
     "get": {"slug": "services", "id_": "5"},
     "detach": {"slug": "services", "id_": "5"},
+    "update": {"slug": "services", "id_": "5", "order": "2"},
 }
 
 # Verbs with no REST endpoint: they refuse instead of returning.
@@ -32,6 +34,7 @@ ROUTES: dict[str, tuple[str, str]] = {
     "attach": ("POST", "/api/v1/site/example.com/artifacts/services/images/"),
     "get": ("GET", "/api/v1/site/example.com/artifacts/services/images/5/"),
     "detach": ("DELETE", "/api/v1/site/example.com/artifacts/services/images/5/"),
+    "update": ("PATCH", "/api/v1/site/example.com/artifacts/services/images/5/"),
 }
 
 
@@ -55,3 +58,20 @@ def test_artifact_image_verbs_send_the_documented_request(
     method, path = ROUTES[verb]
     sent = server.calls[0]
     assert (sent.method, sent.path) == (method, path)
+
+
+def test_attach_sends_the_order_only_when_given(server: FakeServer) -> None:
+    api.attach_image(slug="services", media="12")
+    assert server.last.json() == {"image": 12}
+    api.attach_image(slug="services", media="12", order="3")
+    assert server.last.json() == {"image": 12, "order": 3}
+
+
+def test_update_sends_the_order_as_a_patch(server: FakeServer) -> None:
+    api.update_image(slug="services", id_="5", order="2")
+    assert (server.last.method, server.last.json()) == ("PATCH", {"order": 2})
+
+
+def test_update_refuses_an_order_that_is_not_a_whole_number() -> None:
+    with pytest.raises(ApiError, match="--order"):
+        api.update_image(slug="services", id_="5", order="top")

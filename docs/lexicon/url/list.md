@@ -2,7 +2,7 @@
 name: list
 kind: verb
 domain: [eninesites]
-params: [domain, api-key, base-url, project-name]
+params: [domain, url, api-key, base-url, project-name]
 invocations: [""]
 summary: "List external URL catalog entries (paginated)"
 pnode: [./README.md]

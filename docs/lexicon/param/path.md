@@ -6,9 +6,9 @@ type: path
 required: false
 defined: false
 position: []
-summary: TODO — what `path` means
+summary: "File to upload"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # path

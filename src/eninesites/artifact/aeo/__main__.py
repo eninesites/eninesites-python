@@ -1,6 +1,6 @@
 """CLI entry: python -m eninesites.artifact.aeo
 
-TODO — what `aeo` means
+Add FAQs (AEO data) to your content
 
 A thin surface over ``api``: each verb is one ``_cmd_<verb>`` that calls one api function
 and hands its result to a renderer. It decides nothing and prints nothing itself. Every
@@ -102,7 +102,7 @@ def parser() -> argparse.ArgumentParser:
     """Build the parser without parsing: the audit and --help both read this."""
     p = NounParser(
         prog="python -m eninesites.artifact.aeo",
-        description="TODO — what `aeo` means",
+        description="Add FAQs (AEO data) to your content",
         nodes=commands(),
     )
     sub = p.verbs(subcommands(), dest="phase")
@@ -111,58 +111,78 @@ def parser() -> argparse.ArgumentParser:
     p_get.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
     p_get.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_get.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_get.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_get.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_get.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_get.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_get.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_get.set_defaults(func=_cmd_get)
 
     p_create = sub.add_parser("create")
     p_create.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
     p_create.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_create.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_create.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_create.add_argument("--project-name", help="TODO — what `project-name` means")
-    p_create.add_argument("--data", type=Path, help="TODO — what `data` means")
+    p_create.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_create.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_create.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_create.add_argument(
+        "--data", type=Path, help="JSON file with extra fields (- reads from stdin)"
+    )
     p_create.set_defaults(func=_cmd_create)
 
     p_update = sub.add_parser("update")
     p_update.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
     p_update.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_update.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_update.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_update.add_argument("--project-name", help="TODO — what `project-name` means")
-    p_update.add_argument("--data", type=Path, help="TODO — what `data` means")
+    p_update.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_update.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_update.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_update.add_argument(
+        "--data", type=Path, help="JSON file with extra fields (- reads from stdin)"
+    )
     p_update.set_defaults(func=_cmd_update)
 
     p_delete = sub.add_parser("delete")
     p_delete.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
     p_delete.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_delete.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_delete.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_delete.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_delete.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_delete.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_delete.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_delete.set_defaults(func=_cmd_delete)
 
     for verb_parser in sub.choices.values():

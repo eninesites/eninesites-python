@@ -1,4 +1,4 @@
 """artifact.tag: a namespace only; import ``api`` or ``lib``, no re-exports.
 
-TODO — what `tag` means
+Add/remove tags for your artifacts
 """

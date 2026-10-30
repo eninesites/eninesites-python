@@ -4,9 +4,9 @@ kind: verb
 domain: [eninesites]
 params: [api-key, base-url, project-name, dry-run]
 invocations: [""]
-summary: TODO — what `login` means
+summary: "Log in to the eninesites CLI with your API key"
 pnode: [./README.md]
-bearing: draft
+bearing: contract
 ---
 
 # login

@@ -2,9 +2,9 @@
 name: aeo
 kind: noun
 domain: [eninesites]
-summary: TODO — what `aeo` means
+summary: "Add FAQs (AEO data) to your content"
 pnode: [../README.md]
-bearing: draft
+bearing: contract
 ---
 
 # aeo

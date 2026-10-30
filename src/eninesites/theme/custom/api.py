@@ -6,7 +6,7 @@ nothing below them. Each verb is one function returning one result type from
 
 Server route: ``/api/v1/site/<d>/custom-themes/`` (``CustomThemeExportImportView``,
 ``rest.py:1085-1177``): GET ``?name=`` exports, POST imports (creating or replacing the
-templates) and makes the imported theme the site's active theme.
+templates) and makes it the live theme only when asked, DELETE ``?name=`` removes one.
 """
 
 # A verb's signature is its lexicon params, one keyword per flag, so the count is the
@@ -21,10 +21,10 @@ from pathlib import Path
 from eninesites.errors import ApiError
 from eninesites.lib.client import credentials
 from eninesites.lib.client.http import connect
-from eninesites.lib.client.records import json_file, project
+from eninesites.lib.client.records import boolean, json_file, project, required
 from eninesites.lib.dryrun import PlannedRequest, writes
 
-from .lib.results import CustomTheme, ExportCustom, ImportCustom
+from .lib.results import CustomTheme, DeleteCustom, ExportCustom, ImportCustom
 
 
 def export_custom(
@@ -59,13 +59,15 @@ def import_custom(
     base_url: str | None = None,
     project_name: str | None = None,
     path: Path | None = None,
+    activate: str | None = None,
     dry_run: bool = False,
 ) -> ImportCustom | PlannedRequest:
     """Import a custom theme from a JSON file: ``POST .../custom-themes/``.
 
     ``--path`` is either an export (``theme custom export --json`` output, or the bare
     ``{"custom_theme": ...}`` the server sends) or a ``{"<path>": "<source>"}`` map.
-    ``--name`` and ``--parent`` override the file's; both must end up set.
+    ``--name`` and ``--parent`` override the file's; both must end up set. Without
+    ``--activate true`` the live theme stays: the server makes an import live only when asked.
     """
     theme: dict[str, object] = {}
     if path is not None:
@@ -84,15 +86,47 @@ def import_custom(
                 f"theme custom import: --{key} is required (or in the --path file)"
             )
     theme.setdefault("templates", {})
+    body: dict[str, object] = {"custom_theme": theme}
+    live = boolean(activate, "--activate")
+    if live is not None:
+        body["activate"] = live
     client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
-    payload = client.json(
-        "POST", client.site_path("custom-themes"), body={"custom_theme": theme}
-    )
+    payload = client.json("POST", client.site_path("custom-themes"), body=body)
     reply = payload if isinstance(payload, dict) else {}
+    previous = reply.get("previous_theme")
     return {
         "domain": credentials.require_site(client.settings),
         "name": str(reply.get("name", theme["name"])),
         "theme": str(reply.get("theme", "")),
+        "active": reply.get("active") is True,
+        "previous_theme": None if previous is None else str(previous),
+    }
+
+
+@writes
+def delete_custom(
+    *,
+    name: str | None = None,
+    domain: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    project_name: str | None = None,
+    dry_run: bool = False,
+) -> DeleteCustom | PlannedRequest:
+    """Delete a custom theme and its templates: ``DELETE .../custom-themes/?name=`` (204).
+
+    The server refuses with 409 a theme that is public (``theme_public``), any site's live
+    theme (``theme_in_use``), or the parent of another theme (``theme_has_children``).
+    """
+    label = required(
+        name, "--name", "the custom theme's name, from `theme custom export`"
+    )
+    client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
+    client.request("DELETE", client.site_path("custom-themes"), query={"name": label})
+    return {
+        "domain": credentials.require_site(client.settings),
+        "name": label,
+        "deleted": True,
     }
 
 
@@ -102,4 +136,5 @@ def import_custom(
 VERBS: dict[str, Callable[..., object]] = {
     "export": export_custom,
     "import": import_custom,
+    "delete": delete_custom,
 }

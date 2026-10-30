@@ -2,9 +2,9 @@
 name: site
 kind: noun
 domain: [eninesites]
-summary: TODO — what `site` means
+summary: "Create/manage your site"
 pnode: [../README.md]
-bearing: draft
+bearing: contract
 ---
 
 # site

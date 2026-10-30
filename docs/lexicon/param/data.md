@@ -6,9 +6,9 @@ type: path
 required: false
 defined: false
 position: []
-summary: TODO — what `data` means
+summary: "JSON file with extra fields (- reads from stdin)"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # data

@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `project-name` means
+summary: "Config profile to use (default: default)"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # project-name

@@ -1,6 +1,6 @@
 """CLI entry: python -m eninesites.artifact.image
 
-TODO — what `image` means
+Manage the media gallery for your artifacts
 
 A thin surface over ``api``: each verb is one ``_cmd_<verb>`` that calls one api function
 and hands its result to a renderer. It decides nothing and prints nothing itself. Every
@@ -59,6 +59,7 @@ def _cmd_attach(args: argparse.Namespace) -> int:
         base_url=args.base_url,
         project_name=args.project_name,
         media=args.media,
+        order=args.order,
         dry_run=args.dry_run,
     )
     return json_renderer.show(args, result, plaintext.print_attach)
@@ -89,13 +90,31 @@ def _cmd_detach(args: argparse.Namespace) -> int:
     return json_renderer.show(args, result, plaintext.print_detach)
 
 
+def _cmd_update(args: argparse.Namespace) -> int:
+    result = api.update_image(
+        slug=args.slug,
+        id_=args.id_,
+        domain=args.domain,
+        api_key=args.api_key,
+        base_url=args.base_url,
+        project_name=args.project_name,
+        order=args.order,
+        dry_run=args.dry_run,
+    )
+    return json_renderer.show(args, result, plaintext.print_update)
+
+
 def subcommands() -> list[tuple[str, str]]:
     """One (verb, summary) per verb: the one home of each verb's help text."""
     return [
         ("list", "List gallery images for an artifact (paginated)"),
-        ("attach", "Attach a media file to an artifact's gallery (idempotent)"),
+        (
+            "attach",
+            "Attach a media file to an artifact's gallery, last unless --order says",
+        ),
         ("get", "Get a single gallery image association"),
         ("detach", "Remove a gallery image from an artifact"),
+        ("update", "Move a gallery image to another position"),
     ]
 
 
@@ -103,7 +122,7 @@ def parser() -> argparse.ArgumentParser:
     """Build the parser without parsing: the audit and --help both read this."""
     p = NounParser(
         prog="python -m eninesites.artifact.image",
-        description="TODO — what `image` means",
+        description="Manage the media gallery for your artifacts",
         nodes=commands(),
     )
     sub = p.verbs(subcommands(), dest="phase")
@@ -112,64 +131,122 @@ def parser() -> argparse.ArgumentParser:
     p_list.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
     p_list.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_list.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_list.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_list.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_list.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_list.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_list.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_list.set_defaults(func=_cmd_list)
 
     p_attach = sub.add_parser("attach")
     p_attach.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
     p_attach.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_attach.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_attach.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_attach.add_argument("--project-name", help="TODO — what `project-name` means")
-    p_attach.add_argument("--media", required=True, help="TODO — what `media` means")
+    p_attach.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_attach.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_attach.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_attach.add_argument(
+        "--media", required=True, help="Image to add, by its id from media list"
+    )
+    p_attach.add_argument(
+        "--order", help="Position among the artifact's URLs or images, 0 or more"
+    )
     p_attach.set_defaults(func=_cmd_attach)
 
     p_get = sub.add_parser("get")
     p_get.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
     p_get.add_argument(
-        "--id", dest="id_", metavar="ID", required=True, help="TODO — what `id` means"
+        "--id",
+        dest="id_",
+        metavar="ID",
+        required=True,
+        help="Entry id, from the matching list command",
     )
     p_get.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_get.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_get.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_get.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_get.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_get.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_get.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_get.set_defaults(func=_cmd_get)
 
     p_detach = sub.add_parser("detach")
     p_detach.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
     p_detach.add_argument(
-        "--id", dest="id_", metavar="ID", required=True, help="TODO — what `id` means"
+        "--id",
+        dest="id_",
+        metavar="ID",
+        required=True,
+        help="Entry id, from the matching list command",
     )
     p_detach.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_detach.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_detach.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_detach.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_detach.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_detach.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_detach.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_detach.set_defaults(func=_cmd_detach)
+
+    p_update = sub.add_parser("update")
+    p_update.add_argument(
+        "--slug",
+        required=True,
+        help="Artifact name or slug; for media and tags, their slug",
+    )
+    p_update.add_argument(
+        "--id",
+        dest="id_",
+        required=True,
+        help="Entry id, from the matching list command",
+    )
+    p_update.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_update.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_update.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_update.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_update.add_argument(
+        "--order",
+        required=True,
+        help="Position among the artifact's URLs or images, 0 or more",
+    )
+    p_update.set_defaults(func=_cmd_update)
 
     for verb_parser in sub.choices.values():
         json_renderer.add_flag(verb_parser)

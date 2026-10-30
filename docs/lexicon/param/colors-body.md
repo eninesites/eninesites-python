@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `colors-body` means
+summary: "Page background color"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # colors-body

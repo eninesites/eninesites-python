@@ -28,8 +28,23 @@ class ExportCustom(TypedDict):
 
 
 class ImportCustom(TypedDict):
-    """What ``theme custom import`` returns: the custom theme saved and the theme now active."""
+    """What ``theme custom import`` returns: the custom theme saved, and the live theme.
+
+    ``theme`` is the theme the import saved, live or not. ``active`` says whether it is the
+    site's live theme after the import; ``previous_theme`` names the live theme before it
+    (``None`` when there was none), so ``site configure --theme`` can undo the switch.
+    """
 
     domain: str
     name: str
     theme: str
+    active: bool
+    previous_theme: str | None
+
+
+class DeleteCustom(TypedDict):
+    """What ``theme custom delete`` returns: the theme named, and that it is gone."""
+
+    domain: str
+    name: str
+    deleted: bool

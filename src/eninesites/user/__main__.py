@@ -1,6 +1,6 @@
 """CLI entry: python -m eninesites.user
 
-TODO — what `user` means
+Site user management
 
 A thin surface over ``api``: each verb is one ``_cmd_<verb>`` that calls one api function
 and hands its result to a renderer. It decides nothing and prints nothing itself. Every
@@ -85,6 +85,18 @@ def _cmd_update(args: argparse.Namespace) -> int:
     return json_renderer.show(args, result, plaintext.print_update)
 
 
+def _cmd_remove(args: argparse.Namespace) -> int:
+    result = api.remove_user(
+        username=args.username,
+        domain=args.domain,
+        api_key=args.api_key,
+        base_url=args.base_url,
+        project_name=args.project_name,
+        dry_run=args.dry_run,
+    )
+    return json_renderer.show(args, result, plaintext.print_remove)
+
+
 def subcommands() -> list[tuple[str, str]]:
     """One (verb, summary) per verb: the one home of each verb's help text."""
     return [
@@ -92,6 +104,10 @@ def subcommands() -> list[tuple[str, str]]:
         ("add", "Add an existing user to the site, or update their role (admin only)"),
         ("get", "Get site user"),
         ("update", "Update user role (admin only)"),
+        (
+            "remove",
+            "Remove a user from the site, unless they are its last admin (admin only)",
+        ),
     ]
 
 
@@ -99,53 +115,97 @@ def parser() -> argparse.ArgumentParser:
     """Build the parser without parsing: the audit and --help both read this."""
     p = NounParser(
         prog="python -m eninesites.user",
-        description="TODO — what `user` means",
+        description="Site user management",
         nodes=commands(),
     )
     sub = p.verbs(subcommands(), dest="phase")
 
     p_list = sub.add_parser("list")
     p_list.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_list.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_list.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_list.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_list.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_list.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_list.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_list.set_defaults(func=_cmd_list)
 
     p_add = sub.add_parser("add")
-    p_add.add_argument("--username", required=True, help="TODO — what `username` means")
     p_add.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--username", required=True, help="Username of an existing eninesites user"
     )
-    p_add.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_add.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_add.add_argument("--project-name", help="TODO — what `project-name` means")
-    p_add.add_argument("--role", required=True, help="TODO — what `role` means")
+    p_add.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_add.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_add.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_add.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_add.add_argument(
+        "--role",
+        required=True,
+        help="AEO role code for content, or admin/editor/reader for users",
+    )
     p_add.set_defaults(func=_cmd_add)
 
     p_get = sub.add_parser("get")
-    p_get.add_argument("--username", required=True, help="TODO — what `username` means")
     p_get.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--username", required=True, help="Username of an existing eninesites user"
     )
-    p_get.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_get.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_get.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_get.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_get.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_get.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_get.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_get.set_defaults(func=_cmd_get)
 
     p_update = sub.add_parser("update")
     p_update.add_argument(
-        "--username", required=True, help="TODO — what `username` means"
+        "--username", required=True, help="Username of an existing eninesites user"
     )
     p_update.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_update.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_update.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_update.add_argument("--project-name", help="TODO — what `project-name` means")
-    p_update.add_argument("--role", required=True, help="TODO — what `role` means")
+    p_update.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_update.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_update.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_update.add_argument(
+        "--role",
+        required=True,
+        help="AEO role code for content, or admin/editor/reader for users",
+    )
     p_update.set_defaults(func=_cmd_update)
+
+    p_remove = sub.add_parser("remove")
+    p_remove.add_argument(
+        "--username", required=True, help="Username of an existing eninesites user"
+    )
+    p_remove.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_remove.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_remove.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_remove.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_remove.set_defaults(func=_cmd_remove)
 
     for verb_parser in sub.choices.values():
         json_renderer.add_flag(verb_parser)

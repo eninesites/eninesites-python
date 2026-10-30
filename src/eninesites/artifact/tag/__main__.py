@@ -1,6 +1,6 @@
 """CLI entry: python -m eninesites.artifact.tag
 
-TODO — what `tag` means
+Add/remove tags for your artifacts
 
 A thin surface over ``api``: each verb is one ``_cmd_<verb>`` that calls one api function
 and hands its result to a renderer. It decides nothing and prints nothing itself. Every
@@ -88,7 +88,7 @@ def parser() -> argparse.ArgumentParser:
     """Build the parser without parsing: the audit and --help both read this."""
     p = NounParser(
         prog="python -m eninesites.artifact.tag",
-        description="TODO — what `tag` means",
+        description="Add/remove tags for your artifacts",
         nodes=commands(),
     )
     sub = p.verbs(subcommands(), dest="phase")
@@ -97,44 +97,60 @@ def parser() -> argparse.ArgumentParser:
     p_list.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
     p_list.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_list.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_list.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_list.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_list.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_list.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_list.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_list.set_defaults(func=_cmd_list)
 
     p_attach = sub.add_parser("attach")
     p_attach.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
-    p_attach.add_argument("--tag", required=True, help="TODO — what `tag` means")
     p_attach.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--tag", required=True, help="Tag to add or remove, from tag list"
     )
-    p_attach.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_attach.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_attach.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_attach.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_attach.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_attach.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_attach.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_attach.set_defaults(func=_cmd_attach)
 
     p_detach = sub.add_parser("detach")
     p_detach.add_argument(
         "--slug",
         required=True,
-        help="Artifact name (tried first) or slug (fallback lookup key)",
+        help="Artifact name or slug; for media and tags, their slug",
     )
-    p_detach.add_argument("--tag", required=True, help="TODO — what `tag` means")
     p_detach.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--tag", required=True, help="Tag to add or remove, from tag list"
     )
-    p_detach.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_detach.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_detach.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_detach.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_detach.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_detach.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_detach.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_detach.set_defaults(func=_cmd_detach)
 
     for verb_parser in sub.choices.values():

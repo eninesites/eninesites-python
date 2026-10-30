@@ -10,7 +10,7 @@ import sys
 
 from eninesites.lib.renderer import text
 
-from ..results import ExportCustom, ImportCustom
+from ..results import DeleteCustom, ExportCustom, ImportCustom
 
 
 def print_export(result: ExportCustom) -> None:
@@ -23,10 +23,20 @@ def print_export(result: ExportCustom) -> None:
 
 
 def print_import(result: ImportCustom) -> None:
-    """``theme custom import`` as text."""
+    """``theme custom import`` as text: what was saved, and whether it went live."""
     text.line(
         f"Imported custom theme {result['name']} into {result['domain']} as {result['theme']}"
     )
+    previous = result["previous_theme"] or "none"
+    if result["active"]:
+        text.line(f"Live theme: {result['theme']} (was {previous})")
+    else:
+        text.line(f"Live theme unchanged: {previous}")
+
+
+def print_delete(result: DeleteCustom) -> None:
+    """``theme custom delete`` as text."""
+    text.line(f"Deleted custom theme {result['name']} from {result['domain']}")
 
 
 def error(message: str) -> None:

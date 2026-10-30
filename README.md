@@ -17,9 +17,10 @@ same work runs from a script or a cron job as easily as by hand.
 **The CLI covers:**
 
 - Sites: create, list, copy, configure, dump, load and restore
-- Content: artifacts and their roles, maps, tags, images, design and AEO data
+- Content: artifacts and their roles, maps, tags, images, external URLs, design and AEO data
 - Tags, external URLs, URL maps, media and site users
 - Themes and custom themes
+- The subscription plans you can create a site on
 - XEO audits and AEO JSON-LD inspection
 
 ## Installation
@@ -151,6 +152,16 @@ it usable without reading its help:
 
 Exit codes: 0 done, 1 ran and found something to report, 2 could not run.
 
+### Worked examples
+
+[eninesites-examples](https://github.com/eninesites/eninesites-examples) holds real eninesites
+sites and the CLI commands behind them. It is private: ask for access through the eninesites
+GitHub organization. Each top-level folder is one site, with its backup (`site.json` and
+`media/original/`), a `create.sh` that builds the site from nothing with this CLI, an `edit.sh`
+of everyday edits that each make a change and then undo it, and a `README.md` on what a rebuilt
+copy leaves out. Start with a site's `edit.sh`. How to run the scripts is in the
+[examples README](https://github.com/eninesites/eninesites-examples/blob/main/README.md).
+
 ## Commands
 
 | Noun | Verbs |
@@ -159,30 +170,29 @@ Exit codes: 0 done, 1 ran and found something to report, 2 could not run.
 | `artifact` | create, delete, get, list, update |
 | `artifact.aeo` | create, delete, get, update |
 | `artifact.design` | get, update |
-| `artifact.image` | attach, detach, get, list |
+| `artifact.image` | attach, detach, get, list, update |
 | `artifact.map` | candidates, create, delete, get, list, update |
 | `artifact.role` | assign, list, replace, unassign |
 | `artifact.tag` | attach, detach, list |
+| `artifact.url` | attach, detach, get, list, update |
 | `audit` | get, run |
-| `chat` | magic-link, stream |
 | `media` | delete, get, list, update, upload |
-| `page` | crawl |
+| `plan` | list |
 | `seo` | create, delete, get, list, update |
 | `site` | build, check, configure, copy, create, delete, dump, list, load, propose, randomize-subdomain, restore, review, select |
 | `tag` | create, delete, get, list, update |
 | `theme` | check, create, delete, list, review |
-| `theme.custom` | export, import |
+| `theme.custom` | delete, export, import |
 | `url` | create, delete, get, list, update |
 | `urlmap` | create, delete, get, list, update |
-| `user` | add, get, list, update |
+| `user` | add, get, list, remove, update |
 
 ## Not available over the API
 
 These commands are declared but the eninesites REST API has no endpoint for them; each exits
 2 with a message naming where the operation lives instead: `site delete`, `site check`,
-`site review` and `theme create|delete|check|review` (server `manage.py` commands),
-`site propose`, `site build` and `page crawl` (chat tools), and `chat stream` and
-`chat magic-link` (browser-session endpoints).
+`site review` and `theme create|delete|check|review` (server `manage.py` commands), and
+`site propose` and `site build` (chat tools).
 
 ## Documentation
 

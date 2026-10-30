@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: "Site domain (canonical Site.domain; no alias mechanism)"
+summary: "Your site's domain (overrides the one set by site select)"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # domain

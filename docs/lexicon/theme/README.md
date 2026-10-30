@@ -2,9 +2,9 @@
 name: theme
 kind: noun
 domain: [eninesites]
-summary: TODO — what `theme` means
+summary: "List the themes your site can use"
 pnode: [../README.md]
-bearing: draft
+bearing: contract
 ---
 
 # theme

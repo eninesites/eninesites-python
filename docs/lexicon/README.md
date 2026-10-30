@@ -2,9 +2,9 @@
 name: eninesites
 kind: noun
 domain: [eninesites]
-summary: TODO — what `eninesites` means
+summary: "Build and manage eninesites websites from the terminal"
 pnode: [../../README.md]
-bearing: draft
+bearing: contract
 ---
 
 # eninesites

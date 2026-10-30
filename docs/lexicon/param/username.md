@@ -6,9 +6,9 @@ type: string
 required: true
 defined: false
 position: []
-summary: TODO — what `username` means
+summary: "Username of an existing eninesites user"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # username

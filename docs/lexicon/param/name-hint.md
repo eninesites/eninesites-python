@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `name-hint` means
+summary: "Suggested name for the site (chat only)"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # name-hint

@@ -49,3 +49,10 @@ def test_audit_verbs_send_the_documented_request(verb: str, server: FakeServer) 
     method, path = ROUTES[verb]
     sent = server.calls[0]
     assert (sent.method, sent.path) == (method, path)
+
+
+def test_run_offers_no_limit(run_cli: Callable[..., tuple[int, str, str]]) -> None:
+    # The server audits every sitemap URL; its endpoint takes no page limit.
+    code, out, err = run_cli(cli.main, ["run", "--limit", "5"])
+    assert (code, out) == (2, "")
+    assert "unrecognized arguments: --limit 5" in err

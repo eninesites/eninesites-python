@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `email` means
+summary: "Contact email for your site"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # email

@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `copyright` means
+summary: "Footer copyright text for your site"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # copyright

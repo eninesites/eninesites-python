@@ -1,6 +1,6 @@
 """CLI entry: python -m eninesites.theme.custom
 
-TODO — what `custom` means
+Export, import or delete your site's custom themes
 
 A thin surface over ``api``: each verb is one ``_cmd_<verb>`` that calls one api function
 and hands its result to a renderer. It decides nothing and prints nothing itself. Every
@@ -59,9 +59,22 @@ def _cmd_import(args: argparse.Namespace) -> int:
         base_url=args.base_url,
         project_name=args.project_name,
         path=args.path,
+        activate=args.activate,
         dry_run=args.dry_run,
     )
     return json_renderer.show(args, result, plaintext.print_import)
+
+
+def _cmd_delete(args: argparse.Namespace) -> int:
+    result = api.delete_custom(
+        name=args.name,
+        domain=args.domain,
+        api_key=args.api_key,
+        base_url=args.base_url,
+        project_name=args.project_name,
+        dry_run=args.dry_run,
+    )
+    return json_renderer.show(args, result, plaintext.print_delete)
 
 
 def subcommands() -> list[tuple[str, str]]:
@@ -69,6 +82,10 @@ def subcommands() -> list[tuple[str, str]]:
     return [
         ("export", "Export a custom theme by name"),
         ("import", "Import or update a custom theme from an exported payload"),
+        (
+            "delete",
+            "Delete a custom theme by name, unless it is live, public or a parent",
+        ),
     ]
 
 
@@ -76,32 +93,66 @@ def parser() -> argparse.ArgumentParser:
     """Build the parser without parsing: the audit and --help both read this."""
     p = NounParser(
         prog="python -m eninesites.theme.custom",
-        description="TODO — what `custom` means",
+        description="Export, import or delete your site's custom themes",
         nodes=commands(),
     )
     sub = p.verbs(subcommands(), dest="phase")
 
     p_export = sub.add_parser("export")
-    p_export.add_argument("--name", help="TODO — what `name` means")
     p_export.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--name", help="Name of the site, theme, artifact, tag or URL"
     )
-    p_export.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_export.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_export.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_export.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_export.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_export.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_export.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_export.set_defaults(func=_cmd_export)
 
     p_import = sub.add_parser("import")
-    p_import.add_argument("--name", help="TODO — what `name` means")
-    p_import.add_argument("--parent", help="TODO — what `parent` means")
     p_import.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--name", help="Name of the site, theme, artifact, tag or URL"
     )
-    p_import.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_import.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_import.add_argument("--project-name", help="TODO — what `project-name` means")
-    p_import.add_argument("--path", type=Path, help="TODO — what `path` means")
+    p_import.add_argument(
+        "--parent", help="Built-in theme your custom theme is based on"
+    )
+    p_import.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_import.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_import.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_import.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_import.add_argument("--path", type=Path, help="File to upload")
+    p_import.add_argument(
+        "--activate",
+        help="Make it your site's live theme: true or false (default: false, the live theme stays)",
+    )
     p_import.set_defaults(func=_cmd_import)
+
+    p_delete = sub.add_parser("delete")
+    p_delete.add_argument(
+        "--name", required=True, help="Name of the site, theme, artifact, tag or URL"
+    )
+    p_delete.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_delete.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_delete.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_delete.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_delete.set_defaults(func=_cmd_delete)
 
     for verb_parser in sub.choices.values():
         json_renderer.add_flag(verb_parser)

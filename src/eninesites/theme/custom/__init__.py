@@ -1,4 +1,4 @@
 """theme.custom: a namespace only; import ``api`` or ``lib``, no re-exports.
 
-TODO — what `custom` means
+Export, import or delete your site's custom themes
 """

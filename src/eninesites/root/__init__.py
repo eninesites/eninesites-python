@@ -1,4 +1,4 @@
 """eninesites: a namespace only; import ``api`` or ``lib``, no re-exports.
 
-TODO — what `eninesites` means
+Build and manage eninesites websites from the terminal
 """

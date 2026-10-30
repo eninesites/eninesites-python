@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `name` means
+summary: "Name of the site, theme, artifact, tag or URL"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # name

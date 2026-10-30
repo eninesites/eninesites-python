@@ -6,9 +6,9 @@ type: string
 required: true
 defined: false
 position: []
-summary: "Artifact name (tried first) or slug (fallback lookup key)"
+summary: "Artifact name or slug; for media and tags, their slug"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # slug

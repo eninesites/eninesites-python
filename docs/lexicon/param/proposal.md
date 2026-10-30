@@ -6,9 +6,9 @@ type: string
 required: false
 defined: false
 position: []
-summary: TODO — what `proposal` means
+summary: "Proposal to build the site from (chat only)"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # proposal

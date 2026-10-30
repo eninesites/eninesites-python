@@ -1,6 +1,6 @@
 """CLI entry: python -m eninesites.site
 
-TODO — what `site` means
+Create/manage your site
 
 A thin surface over ``api``: each verb is one ``_cmd_<verb>`` that calls one api function
 and hands its result to a renderer. It decides nothing and prints nothing itself. Every
@@ -42,13 +42,11 @@ def _print_commands() -> None:
 def _cmd_create(args: argparse.Namespace) -> int:
     result = api.create_site(
         name=args.name,
-        user=args.user,
         domain=args.domain,
         email=args.email,
         phone=args.phone,
         theme=args.theme,
         plan=args.plan,
-        sample=args.sample,
         api_key=args.api_key,
         base_url=args.base_url,
         project_name=args.project_name,
@@ -80,9 +78,6 @@ def _cmd_dump(args: argparse.Namespace) -> int:
 def _cmd_load(args: argparse.Namespace) -> int:
     result = api.load_site(
         domain=args.domain,
-        name=args.name,
-        user=args.user,
-        email=args.email,
         api_key=args.api_key,
         base_url=args.base_url,
         project_name=args.project_name,
@@ -94,11 +89,7 @@ def _cmd_load(args: argparse.Namespace) -> int:
 
 def _cmd_restore(args: argparse.Namespace) -> int:
     result = api.restore_site(
-        mode=args.mode,
         domain=args.domain,
-        name=args.name,
-        user=args.user,
-        plan=args.plan,
         api_key=args.api_key,
         base_url=args.base_url,
         project_name=args.project_name,
@@ -112,7 +103,6 @@ def _cmd_copy(args: argparse.Namespace) -> int:
     result = api.copy_site(
         domain=args.domain,
         to=args.to,
-        user=args.user,
         name=args.name,
         plan=args.plan,
         api_key=args.api_key,
@@ -205,9 +195,9 @@ def subcommands() -> list[tuple[str, str]]:
     return [
         ("create", "Create a new site"),
         ("list", "List sites accessible to the authenticated user"),
-        ("dump", "Export site data as JSON, YAML, CSV, zip, or media zip"),
-        ("load", "Import/upsert content into existing site"),
-        ("restore", "Import/upsert content into existing site"),
+        ("dump", "Download your site as a .zip backup or JSON data"),
+        ("load", "Replace your site's content with a JSON export (media stays)"),
+        ("restore", "Replace your site with a .zip backup (content and media)"),
         ("copy", "Duplicate the site into a new domain"),
         (
             "configure",
@@ -237,7 +227,7 @@ def subcommands() -> list[tuple[str, str]]:
                 " --review`"
             ),
         ),
-        ("select", "TODO — what `select` means"),
+        ("select", "Set a default site, so you can leave out --domain"),
         ("randomize-subdomain", "Randomize the site's subdomain"),
         (
             "propose",
@@ -261,163 +251,208 @@ def parser() -> argparse.ArgumentParser:  # pylint: disable=too-many-statements
     """Build the parser without parsing: the audit and --help both read this."""
     p = NounParser(
         prog="python -m eninesites.site",
-        description="TODO — what `site` means",
+        description="Create/manage your site",
         nodes=commands(),
     )
     sub = p.verbs(subcommands(), dest="phase")
 
     p_create = sub.add_parser("create")
-    p_create.add_argument("--name", help="TODO — what `name` means")
-    p_create.add_argument("--user", help="TODO — what `user` means")
     p_create.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--name", help="Name of the site, theme, artifact, tag or URL"
     )
-    p_create.add_argument("--email", help="TODO — what `email` means")
-    p_create.add_argument("--phone", help="TODO — what `phone` means")
-    p_create.add_argument("--theme", help="TODO — what `theme` means")
-    p_create.add_argument("--plan", type=Path, help="TODO — what `plan` means")
-    p_create.add_argument("--sample", help="TODO — what `sample` means")
-    p_create.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_create.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_create.add_argument("--project-name", help="TODO — what `project-name` means")
-    p_create.add_argument("--data", type=Path, help="TODO — what `data` means")
+    p_create.add_argument(
+        "--domain", help="Your site's domain (overrides the one set by site select)"
+    )
+    p_create.add_argument("--email", help="Contact email for your site")
+    p_create.add_argument("--phone", help="Contact phone for your site")
+    p_create.add_argument("--theme", help="Theme for your site (default: bauhaus)")
+    p_create.add_argument(
+        "--plan",
+        type=Path,
+        help="Subscription plan for your site, from plan list (default: free)",
+    )
+    p_create.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_create.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_create.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_create.add_argument(
+        "--data", type=Path, help="JSON file with extra fields (- reads from stdin)"
+    )
     p_create.set_defaults(func=_cmd_create)
 
     p_list = sub.add_parser("list")
-    p_list.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_list.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_list.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_list.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_list.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_list.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_list.set_defaults(func=_cmd_list)
 
     p_dump = sub.add_parser("dump")
     p_dump.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_dump.add_argument("--output", type=Path, help="TODO — what `output` means")
     p_dump.add_argument(
-        "--format", dest="format_", metavar="FORMAT", help="TODO — what `format` means"
+        "--output", type=Path, help="Where to save the file (default: current folder)"
     )
-    p_dump.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_dump.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_dump.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_dump.add_argument(
+        "--format",
+        dest="format_",
+        metavar="FORMAT",
+        help="File format: json (default) or zip",
+    )
+    p_dump.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_dump.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_dump.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_dump.set_defaults(func=_cmd_dump)
 
     p_load = sub.add_parser("load")
     p_load.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_load.add_argument("--name", help="TODO — what `name` means")
-    p_load.add_argument("--user", help="TODO — what `user` means")
-    p_load.add_argument("--email", help="TODO — what `email` means")
-    p_load.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_load.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_load.add_argument("--project-name", help="TODO — what `project-name` means")
-    p_load.add_argument("--path", type=Path, help="TODO — what `path` means")
+    p_load.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_load.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_load.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_load.add_argument("--path", type=Path, help="File to upload")
     p_load.set_defaults(func=_cmd_load)
 
     p_restore = sub.add_parser("restore")
-    p_restore.add_argument("--mode", help="TODO — what `mode` means")
     p_restore.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_restore.add_argument("--name", help="TODO — what `name` means")
-    p_restore.add_argument("--user", help="TODO — what `user` means")
-    p_restore.add_argument("--plan", type=Path, help="TODO — what `plan` means")
-    p_restore.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_restore.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_restore.add_argument("--project-name", help="TODO — what `project-name` means")
-    p_restore.add_argument("--path", type=Path, help="TODO — what `path` means")
+    p_restore.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_restore.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_restore.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_restore.add_argument("--path", type=Path, help="File to upload")
     p_restore.set_defaults(func=_cmd_restore)
 
     p_copy = sub.add_parser("copy")
     p_copy.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_copy.add_argument("--to", required=True, help="TODO — what `to` means")
-    p_copy.add_argument("--user", help="TODO — what `user` means")
-    p_copy.add_argument("--name", help="TODO — what `name` means")
-    p_copy.add_argument("--plan", type=Path, help="TODO — what `plan` means")
-    p_copy.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_copy.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_copy.add_argument("--project-name", help="TODO — what `project-name` means")
+    p_copy.add_argument(
+        "--to", required=True, help="Domain for the new copy of your site"
+    )
+    p_copy.add_argument("--name", help="Name of the site, theme, artifact, tag or URL")
+    p_copy.add_argument(
+        "--plan",
+        type=Path,
+        help="Subscription plan for your site, from plan list (default: free)",
+    )
+    p_copy.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_copy.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_copy.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
     p_copy.set_defaults(func=_cmd_copy)
 
     p_configure = sub.add_parser("configure")
     p_configure.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_configure.add_argument("--title", help="TODO — what `title` means")
-    p_configure.add_argument("--subtitle", help="TODO — what `subtitle` means")
+    p_configure.add_argument("--title", help="Title for your site or content")
+    p_configure.add_argument("--subtitle", help="Subtitle for your site")
     p_configure.add_argument(
         "--copyright",
         dest="copyright_",
         metavar="COPYRIGHT",
-        help="TODO — what `copyright` means",
+        help="Footer copyright text for your site",
     )
-    p_configure.add_argument("--theme", help="TODO — what `theme` means")
+    p_configure.add_argument("--theme", help="Theme for your site (default: bauhaus)")
+    p_configure.add_argument("--colors-primary", help="Primary background color")
+    p_configure.add_argument("--colors-secondary", help="Secondary background color")
+    p_configure.add_argument("--colors-accent", help="Accent background color")
+    p_configure.add_argument("--colors-body", help="Page background color")
     p_configure.add_argument(
-        "--colors-primary", help="TODO — what `colors-primary` means"
+        "--api-key", help="Your API key (overrides the stored one)"
     )
     p_configure.add_argument(
-        "--colors-secondary", help="TODO — what `colors-secondary` means"
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
     )
     p_configure.add_argument(
-        "--colors-accent", help="TODO — what `colors-accent` means"
+        "--project-name", help="Config profile to use (default: default)"
     )
-    p_configure.add_argument("--colors-body", help="TODO — what `colors-body` means")
-    p_configure.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_configure.add_argument("--base-url", help="TODO — what `base-url` means")
-    p_configure.add_argument("--project-name", help="TODO — what `project-name` means")
-    p_configure.add_argument("--path", type=Path, help="TODO — what `path` means")
+    p_configure.add_argument("--path", type=Path, help="File to upload")
     p_configure.set_defaults(func=_cmd_configure)
 
     p_delete = sub.add_parser("delete")
     p_delete.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
     p_delete.set_defaults(func=_cmd_delete)
 
     p_check = sub.add_parser("check")
     p_check.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
     p_check.set_defaults(func=_cmd_check)
 
     p_review = sub.add_parser("review")
     p_review.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
     p_review.set_defaults(func=_cmd_review)
 
     p_select = sub.add_parser("select")
     p_select.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
-    p_select.add_argument("--project-name", help="TODO — what `project-name` means")
-    p_select.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_select.add_argument("--base-url", help="TODO — what `base-url` means")
+    p_select.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
+    )
+    p_select.add_argument("--api-key", help="Your API key (overrides the stored one)")
+    p_select.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
     p_select.set_defaults(func=_cmd_select)
 
     p_randomize_subdomain = sub.add_parser("randomize-subdomain")
     p_randomize_subdomain.add_argument(
-        "--domain", help="Site domain (canonical Site.domain; no alias mechanism)"
-    )
-    p_randomize_subdomain.add_argument("--api-key", help="TODO — what `api-key` means")
-    p_randomize_subdomain.add_argument(
-        "--base-url", help="TODO — what `base-url` means"
+        "--domain", help="Your site's domain (overrides the one set by site select)"
     )
     p_randomize_subdomain.add_argument(
-        "--project-name", help="TODO — what `project-name` means"
+        "--api-key", help="Your API key (overrides the stored one)"
+    )
+    p_randomize_subdomain.add_argument(
+        "--base-url", help="Server to talk to (default: https://eninesites.com)"
+    )
+    p_randomize_subdomain.add_argument(
+        "--project-name", help="Config profile to use (default: default)"
     )
     p_randomize_subdomain.set_defaults(func=_cmd_randomize_subdomain)
 
     p_propose = sub.add_parser("propose")
-    p_propose.add_argument("--description", help="TODO — what `description` means")
-    p_propose.add_argument("--name-hint", help="TODO — what `name-hint` means")
+    p_propose.add_argument(
+        "--description", help="Describe the site you want (chat only)"
+    )
+    p_propose.add_argument(
+        "--name-hint", help="Suggested name for the site (chat only)"
+    )
     p_propose.set_defaults(func=_cmd_propose)
 
     p_build = sub.add_parser("build")
-    p_build.add_argument("--proposal", help="TODO — what `proposal` means")
+    p_build.add_argument(
+        "--proposal", help="Proposal to build the site from (chat only)"
+    )
     p_build.set_defaults(func=_cmd_build)
 
     for verb_parser in sub.choices.values():

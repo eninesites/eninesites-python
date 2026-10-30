@@ -26,9 +26,9 @@ SAMPLES: dict[str, dict[str, Any]] = {
         "plan": Path("free"),
     },
     "list": {},
-    "dump": {"format_": "yaml"},
+    "dump": {"format_": "json"},
     "load": {"path": Path("site.json")},
-    "restore": {"path": Path("site.zip"), "mode": "replace"},
+    "restore": {"path": Path("site.zip")},
     "copy": {"to": "copy.example", "plan": Path("free")},
     "configure": {"title": "Acme", "colors_primary": "#112233"},
     "delete": {},
@@ -79,11 +79,7 @@ def test_site_verbs_send_the_documented_request(verb: str, server: FakeServer) -
 # -- site specifics ---------------------------------------------------------------------
 
 
-def test_create_sends_the_theme_as_config_and_refuses_a_user(
-    server: FakeServer,
-) -> None:
-    from eninesites.errors import ApiError  # pylint: disable=import-outside-toplevel
-
+def test_create_sends_the_theme_as_config(server: FakeServer) -> None:
     server.add("POST", "/api/v1/site/", {"domain": "acme.example"}, status=201)
     assert api.create_site(**SAMPLES["create"]) == {"domain": "acme.example"}
     assert server.last.json() == {
@@ -92,49 +88,51 @@ def test_create_sends_the_theme_as_config_and_refuses_a_user(
         "plan": "free",
         "config": {"theme": {"name": "bauhaus", "path": "bauhaus/templates"}},
     }
-    with pytest.raises(ApiError, match="--user not accepted"):
-        api.create_site(name="x", user="a@b.example")
 
 
 def test_dump_saves_under_the_servers_file_name(server: FakeServer) -> None:
     server.add(
         "GET",
         "/api/v1/site/example.com/",
-        raw=b"domain: example.com\n",
-        content_type="application/x-yaml",
-        headers={"content-disposition": 'attachment; filename="example.com.yaml"'},
+        raw=b'{"domain": "example.com"}',
+        content_type="application/json",
+        headers={"content-disposition": 'attachment; filename="example.com.json"'},
     )
-    result = api.dump_site(format_="yaml")
+    result = api.dump_site(format_="json")
     assert result == {
         "domain": "example.com",
-        "format": "yaml",
-        "path": "example.com.yaml",
-        "bytes": 20,
+        "format": "json",
+        "path": "example.com.json",
+        "bytes": 25,
     }
-    assert Path("example.com.yaml").read_bytes() == b"domain: example.com\n"
-    assert server.last.query == {"dl": ["yaml"]}
+    assert Path("example.com.json").read_bytes() == b'{"domain": "example.com"}'
+    assert server.last.query == {"dl": ["json"]}
 
 
-def test_dump_refuses_an_unknown_format() -> None:
+# The server answers any other ``dl`` with a 400; yaml, csv and media were dropped (#165).
+@pytest.mark.parametrize("fmt", ["xml", "yaml", "csv", "media"])
+def test_dump_refuses_a_format_the_server_does_not_serve(fmt: str) -> None:
     from eninesites.errors import ApiError  # pylint: disable=import-outside-toplevel
 
     with pytest.raises(ApiError, match="--format"):
-        api.dump_site(format_="xml")
+        api.dump_site(format_=fmt)
 
 
-def test_load_sends_the_file_and_points_a_zip_at_restore(server: FakeServer) -> None:
+def test_load_sends_the_json_as_the_body_and_points_a_zip_at_restore(
+    server: FakeServer,
+) -> None:
     from eninesites.errors import ApiError  # pylint: disable=import-outside-toplevel
 
     api.load_site(path=Path("site.json"))
-    assert server.last.body is not None and b'filename="site.json"' in server.last.body
+    assert server.last.json() == {"content": []}
     with pytest.raises(ApiError, match="site restore"):
         api.load_site(path=Path("site.zip"))
 
 
-def test_restore_sends_the_mode_and_the_archive(server: FakeServer) -> None:
-    result = dryrun.done(api.restore_site(path=Path("site.zip"), mode="replace"))
-    assert result["mode"] == "replace"
-    assert server.last.query == {"mode": ["replace"]}
+def test_restore_sends_the_archive_and_no_mode(server: FakeServer) -> None:
+    result = dryrun.done(api.restore_site(path=Path("site.zip")))
+    assert result == {"domain": "example.com", "file": "site.zip"}
+    assert not server.last.query
     assert server.last.body is not None and b'filename="site.zip"' in server.last.body
 
 
@@ -208,7 +206,32 @@ def test_the_cli_sends_the_path_and_has_no_file_switch(
 ) -> None:
     code, _, err = run_cli(cli.main, ["load", "--path", "site.json", "--json"])
     assert (code, err) == (0, "")
-    assert server.last.body is not None and b'filename="site.json"' in server.last.body
+    assert server.last.json() == {"content": []}
     code, out, err = run_cli(cli.main, ["load", "--file"])
     assert (code, out) == (2, "")
     assert "unrecognized arguments: --file" in err
+
+
+# Flags no REST endpoint takes: the server's manage.py flags, and restore's merge/clobber
+# modes, which the server dropped (a restore always replaces).
+NOT_OVER_REST_FLAGS: list[tuple[str, str]] = [
+    ("create", "--user"),
+    ("create", "--sample"),
+    ("load", "--name"),
+    ("load", "--user"),
+    ("load", "--email"),
+    ("restore", "--name"),
+    ("restore", "--user"),
+    ("restore", "--plan"),
+    ("restore", "--mode"),
+    ("copy", "--user"),
+]
+
+
+@pytest.mark.parametrize("verb,flag", NOT_OVER_REST_FLAGS)
+def test_a_flag_no_endpoint_takes_is_not_offered(
+    verb: str, flag: str, run_cli: Callable[..., tuple[int, str, str]]
+) -> None:
+    code, out, err = run_cli(cli.main, [verb, flag, "x"])
+    assert (code, out) == (2, "")
+    assert f"unrecognized arguments: {flag} x" in err

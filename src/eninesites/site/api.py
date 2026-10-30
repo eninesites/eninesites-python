@@ -29,7 +29,6 @@ from eninesites.lib.client.records import (
     json_file,
     merged,
     not_over_rest,
-    refuse_unsupported,
     rows,
 )
 from eninesites.lib.dryrun import PlannedRequest, writes
@@ -52,30 +51,19 @@ from .lib.results import (
     SiteRow,
 )
 
-#: ``?dl=`` formats ``SiteDetailView.get`` serves, and the extension each is saved under.
-DUMP_FORMATS = {
-    "json": "json",
-    "yaml": "yaml",
-    "csv": "csv",
-    "zip": "zip",
-    "media": "zip",
-}
-#: What ``POST /api/v1/site/<d>/`` parses as an upsert; a .zip is ``site restore``.
-LOAD_SUFFIXES = (".json", ".yml", ".yaml", ".csv")
-RESTORE_MODES = ("merge", "clobber", "replace")
+#: ``?dl=`` formats ``SiteDetailView.get`` serves; each is saved under its own extension.
+DUMP_FORMATS = ("json", "zip")
 
 
 @writes
 def create_site(
     *,
     name: str | None = None,
-    user: str | None = None,
     domain: str | None = None,
     email: str | None = None,
     phone: str | None = None,
     theme: str | None = None,
     plan: Path | None = None,
-    sample: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
@@ -84,16 +72,12 @@ def create_site(
 ) -> CreateSite | PlannedRequest:
     """Create a site owned by the caller: ``POST /api/v1/site/``.
 
-    ``--domain`` is the NEW site's domain; without it a free plan is served on an allocated
-    subdomain. ``--data`` carries any other body field (``config``, ``colors``, ``content``,
-    ``template``); the named flags override it.
+    ``--domain`` is the NEW site's domain; without it the server makes one up, on any plan,
+    and returns it. ``--data`` carries any other body field (``config``, ``colors``,
+    ``content``, ``template``); the named flags override it. ``template`` is a starter
+    content file (e.g. ``agency``), not a theme, and with it the server reads only
+    ``domain`` and ``name``.
     """
-    refuse_unsupported(
-        "site create",
-        "the server makes the caller the owner, and sample content is a manage.py option",
-        user=user,
-        sample=sample,
-    )
     body = merged(
         data,
         domain=domain,
@@ -135,9 +119,10 @@ def dump_site(
 ) -> DumpSite:
     """Save the site's export to a file: ``GET /api/v1/site/<d>/?dl=<format>``.
 
-    Formats: json (default), yaml, csv, zip (the portable archive ``site restore`` takes
-    back) and media. The file is named by ``--output`` (a file, or a directory to put it
-    in), else by the server's ``Content-Disposition``; an existing file is replaced.
+    Formats: json (default; the site's data without its media, which ``site load`` takes
+    back) and zip (the backup: the data and every media file, which ``site restore`` takes
+    back). The file is named by ``--output`` (a file, or a directory to put it in), else by
+    the server's ``Content-Disposition``; an existing file is replaced.
     """
     fmt = (format_ or "json").lower()
     if fmt not in DUMP_FORMATS:
@@ -145,7 +130,7 @@ def dump_site(
     client = connect(api_key, base_url, project_name, domain)
     reply = client.request("GET", client.site_path(), query={"dl": fmt})
     site = credentials.require_site(client.settings)
-    name = filename_from(reply) or f"{site}.{DUMP_FORMATS[fmt]}"
+    name = filename_from(reply) or f"{site}.{fmt}"
     target = Path(output).expanduser() if output else Path(name)
     if target.is_dir():
         target = target / name
@@ -182,35 +167,25 @@ def _source(path: Path | None, verb: str, kinds: str) -> Path:
 def load_site(
     *,
     domain: str | None = None,
-    name: str | None = None,
-    user: str | None = None,
-    email: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
     path: Path | None = None,
     dry_run: bool = False,
 ) -> LoadSite | PlannedRequest:
-    """Upsert a .json/.yml/.yaml/.csv file into an existing site: ``POST /api/v1/site/<d>/``.
+    """Replace the site's content with a JSON export: ``POST /api/v1/site/<d>/``, JSON body.
 
-    An upsert, not a replace (``docs/API.md``, "Import is an upsert"). Creating a new site
-    from a file is ``manage.py site --load``; over REST, create the site first.
+    The server wipes the site's content and loads the file; there is no merge. The media
+    library stays: every media name the file uses must already be in it, or the server
+    refuses with ``missing_media`` and changes nothing. ``site dump --format json`` writes
+    such a file. Creating a new site from a file is ``manage.py site --load``.
     """
-    refuse_unsupported(
-        "site load",
-        "they create a new site, which only manage.py site --load does; "
-        "create the site with `site create`, then load into it",
-        name=name,
-        user=user,
-        email=email,
-    )
-    source = _source(path, "site load", ".json, .yml, .yaml or .csv")
-    suffix = source.suffix.lower()
-    if suffix not in LOAD_SUFFIXES:
-        hint = " (a .zip archive is `site restore`)" if suffix == ".zip" else ""
-        raise ApiError(f"--path {source}: expected .json, .yml, .yaml or .csv{hint}")
+    source = _source(path, "site load", "a .json from `site dump --format json`")
+    if source.suffix.lower() == ".zip":
+        raise ApiError(f"--path {source}: a .zip backup is `site restore`")
+    body = json_file(source, "--path")
     client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
-    payload = client.json("POST", client.site_path(), files=[source])
+    payload = client.json("POST", client.site_path(), body=body)
     site = (payload or {}).get("domain") or credentials.require_site(client.settings)
     return {"domain": str(site), "file": str(source)}
 
@@ -218,42 +193,25 @@ def load_site(
 @writes
 def restore_site(
     *,
-    mode: str | None = None,
     domain: str | None = None,
-    name: str | None = None,
-    user: str | None = None,
-    plan: Path | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
     project_name: str | None = None,
     path: Path | None = None,
     dry_run: bool = False,
 ) -> RestoreSite | PlannedRequest:
-    """Restore a portable .zip over an existing site: ``POST /api/v1/site/<d>/?mode=``.
+    """Replace the site with a .zip backup: ``POST /api/v1/site/<d>/``, the file uploaded.
 
-    ``merge`` (default) keeps rows the archive does not mention, ``clobber`` overwrites rows
-    it carries, ``replace`` wipes the site's content and media first. Restoring into a
-    fresh site is ``manage.py site --load x.zip``.
+    The server wipes the site's content and media and restores the archive's; there is no
+    merge. Restoring into a fresh site is ``manage.py site --load x.zip``.
     """
-    refuse_unsupported(
-        "site restore",
-        "restoring into a fresh site is manage.py only; restore over an existing --domain",
-        name=name,
-        user=user,
-        plan=plan,
-    )
-    chosen = (mode or "merge").lower()
-    if chosen not in RESTORE_MODES:
-        raise ApiError(f"--mode {chosen!r}: expected one of {', '.join(RESTORE_MODES)}")
     source = _source(path, "site restore", "a .zip from `site dump --format zip`")
     if source.suffix.lower() != ".zip":
         raise ApiError(f"--path {source}: expected a .zip archive")
     client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)
-    payload = client.json(
-        "POST", client.site_path(), query={"mode": chosen}, files=[source]
-    )
+    payload = client.json("POST", client.site_path(), files=[source])
     site = (payload or {}).get("domain") or credentials.require_site(client.settings)
-    return {"domain": str(site), "file": str(source), "mode": chosen}
+    return {"domain": str(site), "file": str(source)}
 
 
 @writes
@@ -261,7 +219,6 @@ def copy_site(
     *,
     domain: str | None = None,
     to: str | None = None,
-    user: str | None = None,
     name: str | None = None,
     plan: Path | None = None,
     api_key: str | None = None,
@@ -270,7 +227,6 @@ def copy_site(
     dry_run: bool = False,
 ) -> CopySite | PlannedRequest:
     """Copy a site losslessly into a new domain: ``POST /api/v1/site/<d>/copy/``."""
-    refuse_unsupported("site copy", "the copy is owned by the caller", user=user)
     if not to:
         raise ApiError("site copy: --to <new-domain> is required")
     client = connect(api_key, base_url, project_name, domain, dry_run=dry_run)

@@ -6,9 +6,9 @@ type: boolean
 required: false
 defined: false
 position: []
-summary: TODO — what `apply` means
+summary: "Fix what the check finds (manage.py only)"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # apply

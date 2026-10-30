@@ -22,9 +22,7 @@ from eninesites.lib.renderer import text
 
 Result = TypeVar("Result", bound=Mapping[str, Any])
 
-FLAG_HELP = (
-    "Print the api result as JSON (the shape output() publishes) instead of text."
-)
+FLAG_HELP = "Print the result as JSON instead of text"
 
 
 class ArgumentHolder(Protocol):  # pylint: disable=too-few-public-methods

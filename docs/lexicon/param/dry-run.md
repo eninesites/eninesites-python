@@ -6,9 +6,9 @@ type: boolean
 required: false
 defined: false
 position: []
-summary: TODO — what `dry-run` means
+summary: "Show what would be sent or written, and change nothing"
 pnode: [README.md]
-bearing: draft
+bearing: contract
 ---
 
 # dry-run

@@ -117,7 +117,8 @@ def parser() -> argparse.ArgumentParser:
     )
     p_import.add_argument("--path", type=Path, help="File to upload")
     p_import.add_argument(
-        "--activate", help="Make it your site's active theme: true (default) or false"
+        "--activate",
+        help="Make it your site's live theme: true or false (default: false, the live theme stays)",
     )
     p_import.set_defaults(func=_cmd_import)
 

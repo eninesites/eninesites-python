@@ -67,7 +67,7 @@ def import_custom(
     ``--path`` is either an export (``theme custom export --json`` output, or the bare
     ``{"custom_theme": ...}`` the server sends) or a ``{"<path>": "<source>"}`` map.
     ``--name`` and ``--parent`` override the file's; both must end up set. Without
-    ``--activate`` the server's default holds: the imported theme becomes the live one.
+    ``--activate true`` the live theme stays: the server makes an import live only when asked.
     """
     theme: dict[str, object] = {}
     if path is not None:

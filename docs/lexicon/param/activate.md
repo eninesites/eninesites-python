@@ -6,7 +6,7 @@ type: string
 required: false
 defined: false
 position: []
-summary: "Make it your site's active theme: true (default) or false"
+summary: "Make it your site's live theme: true or false (default: false, the live theme stays)"
 pnode: [README.md]
 bearing: contract
 ---

@@ -25,8 +25,8 @@ All notable changes to this project are documented in this file. The format is b
 - `--dry-run` on every write verb: the request the verb would send, returned as its result
   and not sent.
 - `python -m eninesites describe`: every command, its flags and its output schema, as data.
-- `theme custom import --activate false` imports a custom theme without making it the live
-  one; left out, the server's default holds and it goes live. The result now says whether it
+- `theme custom import --activate true` makes the imported custom theme the live one; left
+  out (or `false`), the live theme stays, as the server does since its API 3.0.0. The result now says whether it
   did (`active`) and which theme was live before (`previous_theme`), so the switch can be undone
   with `site configure --theme`.
 - Under `--json`, a refusal is one JSON document on stderr (`status`, `code`, `detail`,
